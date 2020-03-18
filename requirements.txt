@@ -1,4 +1,3 @@
-pymongo
-pymysql
-redis
 mysql-connector-python
+pymongo
+redis

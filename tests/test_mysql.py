@@ -4,87 +4,114 @@ import os
 import sys
 from datetime import datetime
 
-from zwdb.zwdb import Database
+from zwdb.zwmysql import ZWMysql
 
 @pytest.fixture(scope='module')
 def db():
     db_url = 'mysql://tester:test@localhost/testdb'
-    with Database(db_url) as dbobj:
-        yield dbobj
+    with ZWMysql(db_url) as dbobj:
+        with dbobj.get_connection() as conn:
+            tbl = 'CREATE TABLE `tbl` ( \
+                `id` int(11) NOT NULL AUTO_INCREMENT, \
+                `txt` varchar(45) DEFAULT NULL, \
+                PRIMARY KEY (`id`) \
+                ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4;'
+            tbl_insert = 'CREATE TABLE `testdb`.`tbl_insert` (\
+                `id` INT NOT NULL,\
+                `txt` VARCHAR(45) NULL,\
+                `num` FLOAT NULL,\
+                `none` VARCHAR(45) NULL,\
+                `dt` DATETIME NULL,\
+                PRIMARY KEY (`id`));'
+            tbls = [tbl, tbl_insert]
+            for t in tbls:
+                conn.execute(t, commit=True)
 
-class TestDatabase:
-    def test_get_table_names(self, db):
-        nms = db.get_table_names()
-        assert len(nms)>0
-  
-    def test_findmany(self, db):
-        rs = db.findmany('tbl_0')
+            recs_insert = [{'id':1, 'txt':'abc'}, {'id':2, 'txt':'def'}, {'id':3, 'txt':'xxx'}]
+            ks = recs_insert[0].keys()
+            fs = ','.join(ks)
+            vs = ','.join(['%({})s'.format(s) for s in ks])
+            stmt = 'INSERT INTO tbl ({}) VALUES({})'.format(fs, vs)
+            conn.executemany(stmt, fetchall=False, commit=True, paramslist=recs_insert)
+        yield dbobj
+        # clean
+        with dbobj.get_connection() as conn:
+            tbls = ['tbl', 'tbl_insert']
+            for t in tbls:
+                conn.execute('DROP TABLE IF EXISTS %s'%t, commit=True)
+
+class TestMysql:
+    def test_list(self, db):
+        assert len(db.lists())>0
+    
+    def test_find(self, db):
+        rs = db.find('tbl')
         assert rs.pending == True
         recs = list(rs)
-        assert rs.pending == False
-        assert recs[0].txt == 'a'
-        assert len(recs) == 3
+        assert rs.pending == False and recs[0].txt == 'abc' and len(recs) == 3
 
-        rs = db.findmany('tbl_0')
+        rs = db.find('tbl')
         assert rs.pending == True
         recs = rs.all()
-        assert rs.pending == False
-        assert recs[0].txt == 'a'
-        assert len(recs) == 3
-
-        rs = db.findmany('tbl_0')
+        assert rs.pending == False and recs[0].txt == 'abc' and len(recs) == 3
+  
+        rs = db.find('tbl')
         assert rs.pending == True
         recs = [r for r in rs]
-        assert rs.pending == False
-        assert recs[0].txt == 'a'
-        assert len(recs) == 3
-
-        rs = db.findmany('tbl_0', fetchall=True)
+        assert rs.pending == False and recs[0].txt == 'abc' and len(recs) == 3
+        
+        rs = db.find('tbl', fetchall=True)
         assert rs.pending == False
 
-        rs = db.findmany('tbl_0', fetchall=True, id=1)
+        rs = db.find('tbl', fetchall=True, id=1, txt='abc')
         assert len(rs) == 1
 
     @pytest.mark.parametrize(
-        'rec', (
-            {'id':1, 'txt':'a', 'num':1, 'none':None, 'dt':datetime.now()},
+        'recs', (
+            [
+                {'id':1, 'txt':'a', 'num':1.0, 'none':None, 'dt':datetime.now()},
+                {'id':2, 'txt':'b', 'num':2.0, 'none':None, 'dt':datetime.now()}
+            ],
         )
-    ) 
-    def test_insertmany(self, db, rec):
-        tbl = 'tbl_insert'
-        db.execute('TRUNCATE %s'%tbl, commit=True)
-        c = db.insertmany(tbl, [rec])
-        assert c == 1
-    
-    @pytest.mark.parametrize(
-        'rec, keyflds', (
-            ({'id':1, 'txt':'a', 'num':333, 'none':None, 'dt':datetime.now()}, ['id']),
-        )
-    ) 
-    def test_updatemany(self, db, rec, keyflds):
-        c = db.updatemany('tbl_insert', [rec], keyflds)
-        assert c == 1
-    
-    @pytest.mark.parametrize(
-        'recs, keyflds', (
-            (
-                [
-                    {'id':1, 'txt':'a', 'num':555, 'none':None, 'dt':datetime.now()},
-                    {'id':999, 'txt':'a', 'num':222, 'none':None, 'dt':datetime.now()}
-                ], 
-                ['id']
-            ),
-        )
-    ) 
-    def test_updsertmany(self, db, recs, keyflds):
-        c = db.upsertmany('tbl_insert', recs, keyflds)
-        assert c == 2
+    )
+    def test_insert(self, db, recs):
+        c = db.insert('tbl_insert', recs)
+        assert c == len(recs)
 
     @pytest.mark.parametrize(
-        'rec, keyflds', (
-            ({'id':1}, ['id']),
+        'recs, keyflds', (
+            ([{'id':1, 'txt':'aa'},{'id':2, 'txt':'bb'}],['id']),
         )
-    ) 
-    def test_deletemany(self, db, rec, keyflds):
-        c = db.deletemany('tbl_insert', [rec], keyflds)
-        assert c == 1
+    )
+    def test_update(self, db, recs, keyflds):
+        tbl = 'tbl_insert'
+        c = db.update(tbl, recs, keyflds=keyflds)
+        for rec in recs:
+            r = db.find(tbl, id=rec['id'], fetchall=True)
+            assert r[0].txt == rec['txt']
+        assert c == len(recs)
+
+    @pytest.mark.parametrize(
+        'recs, keyflds', (
+            ([{'id':1, 'txt':'a'},{'id':3, 'txt':'c', 'num':3.0, 'dt':datetime.now()}],['id']),
+        )
+    )    
+    def test_upsert(self, db, recs, keyflds):
+        tbl = 'tbl_insert'
+        c = db.upsert(tbl, recs, keyflds=keyflds)
+        total_recs = db.find(tbl, fetchall=True)
+        for rec in recs:
+            r = db.find(tbl, id=rec['id'], fetchall=True)
+            assert r[0].txt == rec['txt']
+        assert c == len(recs) and 3 == len(total_recs)
+
+    @pytest.mark.parametrize(
+        'recs, keyflds', (
+            ([{'id':1},{'id':3}], ['id']),
+        )
+    )
+    def test_delete(self, db, recs, keyflds):
+        tbl = 'tbl_insert'
+        c = db.delete('tbl_insert', recs, keyflds=keyflds)
+        total_recs = db.find(tbl, fetchall=True)
+        assert c == 2 and 1 == len(total_recs)

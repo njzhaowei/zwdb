@@ -18,7 +18,7 @@ class ZWMongo(object):
             'host'      : o['host'],
             'port'      : o['port'] or 27017,
             'username'  : o['usr'],
-            'password'  : o['pwd'],
+            'password'  : o['pwd']
         }
         self.dbname = o['db']
         self.dbcfg.update(kwargs)
@@ -28,6 +28,7 @@ class ZWMongo(object):
         for p in cfg:
             self.dbcfg[p] = self.dbcfg.get(p, cfg[p])
 
+        self.client = None
         client = pymongo.MongoClient(**self.dbcfg)
         try:
             # The ismaster command is cheap and does not require auth.
@@ -40,33 +41,27 @@ class ZWMongo(object):
     def pool_size(self):
         return self.client.max_pool_size
 
+    @property
+    def version(self):
+        return pymongo.version
+
     def connect(self):
-        conn = self.client[self.dbname]
-        return ZWMongoConnection(conn)
+        db = self.client[self.dbname]
+        return ZWMongoConnection(db)
 
     def dispose(self):
         self.client.close()
 
     def get_table_names(self):
-        with self.connect() as conn:
-            rs = conn._conn.list_collection_names()
-        return rs
+        return self.client[self.dbname].list_collection_names()
 
 class ZWMongoConnection(Connection):
     def __init__(self, conn):
-        self._conn = conn
-        self._cursor = None
+        self._db = conn
         self.open = True
     
     def close(self):
-        self._close_cursor()
-        self._conn.close()
         self.open = False
-    
-    def _close_cursor(self):
-        if self._cursor:
-            self._cursor.close()
-            self._cursor = None
 
     def __enter__(self):
         return self
@@ -85,34 +80,7 @@ class ZWMongoConnection(Connection):
             raise StopIteration('Cursor contains no more rows.')
 
     def execute(self, stmt, fetchall=True, commit=False, **params):
-        '''use execute to run raw sql and we don't want multi stmt in operation(multi=False)
-        '''
-        params = params or {}
-        # Execute the given query
-        self._cursor = self._conn.cursor(buffered=False)
-        self._cursor.execute(stmt, params=params)
-        keys = self._cursor.column_names
-        if commit:
-            self._conn.commit()
-        row_gen = (keys, self)
-        results = RecordCollection(*row_gen)
-        if fetchall:
-            results.all()
-        return results
-
-    def executemany(self, stmt, fetchall=True, commit=False, paramslist=None):
-        paramslist = paramslist or []
-        # Execute the given query
-        self._cursor = self._conn.cursor(buffered=False)
-        self._cursor.executemany(stmt, paramslist)
-        keys = self._cursor.column_names
-        if commit:
-            self._conn.commit()
-        row_gen = (keys, self)
-        results = RecordCollection(*row_gen)
-        if fetchall:
-            results.all()
-        return results
+        pass
 
     def find(self, dst, fetchall=False, **params):
         """select query
@@ -176,4 +144,4 @@ class ZWMongoConnection(Connection):
         rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
         return rc._rows._cursor.rowcount
 
-Connection.register(ZWMongoConnection)
+Connection.register(    )

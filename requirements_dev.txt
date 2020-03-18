@@ -4,3 +4,4 @@ wheel
 twine
 pytest
 pytest-xdist
+pymysql

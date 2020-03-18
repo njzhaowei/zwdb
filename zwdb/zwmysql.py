@@ -1,15 +1,19 @@
+import os
+from contextlib import contextmanager
+
 import mysql.connector
 import mysql.connector.pooling
 
 from . import utils
-from .zwdb import Connection
-from .zwdb import Record
-from .zwdb import RecordCollection
-from .zwdb import ZwdbError
+from .records import Record, RecordCollection
 
 class ZWMysql(object):
     """Class defining a MySQL driver"""
     def __init__(self, db_url, **kwargs):
+        self.db_url = db_url or os.environ.get('DATABASE_URL')
+        if not self.db_url:
+            raise ValueError('You must provide a db_url.')
+
         o = utils.db_url_parser(db_url)
         p = o['props']
         self.dbcfg = {
@@ -37,27 +41,84 @@ class ZWMysql(object):
         """Return number of connections managed by the pool"""
         return self._pool.pool_size
 
-    def connect(self):
+    def get_connection(self):
         if not self._pool:
             self._pool = mysql.connector.pooling.MySQLConnectionPool(**self.dbcfg)
         conn = self._pool.get_connection()
         return ZWMysqlConnection(conn)
 
-    def dispose(self):
+    def close(self):
         self._pool._remove_connections()
 
-    def get_table_names(self):
-        with self.connect() as conn:
+    def lists(self):
+        with self.get_connection() as conn:
             rs = conn.execute('SHOW TABLES')
             recs = rs.all()
         return recs
+    
+    def find(self, tbl, fetchall=False, **params):
+        conn = self.get_connection()
+        recs = conn.find(tbl, fetchall, **params)
+        if fetchall:
+            recs.all()
+            conn.close()
+        return recs
+    
+    def insert(self, tbl, recs):
+        with self.get_connection() as conn:
+            rtn = conn.insert(tbl, recs)
+        return rtn
+    
+    def update(self, tbl, recs, keyflds):
+        with self.get_connection() as conn:
+            rtn = conn.update(tbl, recs, keyflds)
+        return rtn
+    
+    def upsert(self, tbl, recs, keyflds):
+        with self.get_connection() as conn:
+            rtn = conn.upsert(tbl, recs, keyflds)
+        return rtn
 
-class ZWMysqlConnection(Connection):
+    def delete(self, tbl, recs, keyflds):
+        with self.get_connection() as conn:
+            rtn = conn.delete(tbl, recs, keyflds)
+        return rtn
+
+    @contextmanager
+    def transaction(self):
+        """A context manager for executing a transaction on this Database."""
+        pass
+        # conn = self.get_connection()
+        # tx = conn.transaction()
+        # try:
+        #     yield conn
+        #     tx.commit()
+        # except:
+        #     tx.rollback()
+        # finally:
+        #     conn.close()
+
+    def __repr__(self):
+        return '<Database host={}>'.format(self.dbcfg['host'])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc, val, traceback):
+        self.close()
+
+class ZWMysqlConnection(object):
     def __init__(self, conn):
         self._conn = conn
         self._cursor = None
         self.open = True
-    
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc, val, traceback):
+        self.close()
+
     def close(self):
         self._close_cursor()
         self._conn.close()
@@ -108,28 +169,28 @@ class ZWMysqlConnection(Connection):
             results.all()
         return results
 
-    def find(self, dst, fetchall=False, **params):
+    def find(self, tbl, fetchall=False, **params):
         """select query
         """
-        stmt = 'SELECT * FROM {}'.format(dst)
+        stmt = 'SELECT * FROM {}'.format(tbl)
         ks = params.keys()
         if params:
-            vs = ','.join(['{0}=%({0})s'.format(s) for s in ks])
+            vs = ' AND '.join(['{0}=%({0})s'.format(s) for s in ks])
             stmt += ' WHERE {}'.format(vs)
-        results = self.execute(stmt, fetchall=fetchall, **params)
+        results = self.execute(stmt, fetchall=fetchall, commit=False, **params)
         return results
 
-    def insert(self, dst, recs):
+    def insert(self, tbl, recs):
         if len(recs) == 0:
             return 0
         ks = recs[0].keys()
         fs = ','.join(ks)
         vs = ','.join(['%({})s'.format(s) for s in ks])
-        stmt = 'INSERT INTO {} ({}) VALUES({})'.format(dst, fs, vs)
+        stmt = 'INSERT INTO {} ({}) VALUES({})'.format(tbl, fs, vs)
         rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
         return rc._rows._cursor.rowcount
-    
-    def update(self, dst, recs, keyflds):
+
+    def update(self, tbl, recs, keyflds):
         if len(recs) == 0:
             return 0
         rec = recs[0]
@@ -138,11 +199,11 @@ class ZWMysqlConnection(Connection):
         ws = ['{0}=%({0})s'.format(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
-        stmt = 'UPDATE {} SET {} WHERE {}'.format(dst, vs, ws)
+        stmt = 'UPDATE {} SET {} WHERE {}'.format(tbl, vs, ws)
         rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
         return rc._rows._cursor.rowcount
-    
-    def upsert(self, dst, recs, keyflds):
+
+    def upsert(self, tbl, recs, keyflds):
         if len(recs) == 0:
             return 0
         recs_update = []
@@ -150,24 +211,22 @@ class ZWMysqlConnection(Connection):
         ws = ['{0}=%({0})s'.format(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
-        stmt = 'SELECT count(*) AS count FROM {} WHERE {}'.format(dst, ws)
+        stmt = 'SELECT count(*) AS count FROM {} WHERE {}'.format(tbl, ws)
         for rec in recs:
-            r = self.execute(stmt, fetchall=True, **rec)
+            r = self.execute(stmt, fetchall=True, commit=False, **rec)
             if r[0].count == 0:
                 recs_insert.append(rec)
             else:
                 recs_update.append(rec)
-        c = self.update(dst, recs_update, keyflds) + self.insert(dst, recs_insert)
+        c = self.update(tbl, recs_update, keyflds) + self.insert(tbl, recs_insert)
         return c
-    
-    def delete(self, dst, recs, keyflds):
+
+    def delete(self, tbl, recs, keyflds):
         if len(recs) == 0:
             return 0
         ws = ['{0}=%({0})s'.format(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
-        stmt = 'DELETE FROM {} WHERE {}'.format(dst, ws)
+        stmt = 'DELETE FROM {} WHERE {}'.format(tbl, ws)
         rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
         return rc._rows._cursor.rowcount
-
-Connection.register(ZWMysqlConnection)

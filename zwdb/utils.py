@@ -27,8 +27,6 @@ def boolstr2bool(s):
     return v
 
 def db_url_parser(db_url):
-    # regx = r'(mysql|mongo)://(\w+):(\w+)@(\w+):?(\d+)?/(\w+)\??(.+)?'
-    # m = re.match(regx, db_url)
     r = urlparse(db_url)
     props = parse_qs(r.query)
     props = {k: boolstr2bool(v[0]) for k,v in props.items()}
