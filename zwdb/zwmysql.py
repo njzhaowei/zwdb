@@ -41,6 +41,10 @@ class ZWMysql(object):
         """Return number of connections managed by the pool"""
         return self._pool.pool_size
 
+    @property
+    def version(self):
+        return mysql.connector.__version__
+
     def get_connection(self):
         if not self._pool:
             self._pool = mysql.connector.pooling.MySQLConnectionPool(**self.dbcfg)
@@ -60,7 +64,6 @@ class ZWMysql(object):
         conn = self.get_connection()
         recs = conn.find(tbl, fetchall, **params)
         if fetchall:
-            recs.all()
             conn.close()
         return recs
     
@@ -99,7 +102,7 @@ class ZWMysql(object):
         #     conn.close()
 
     def __repr__(self):
-        return '<Database host={}>'.format(self.dbcfg['host'])
+        return '<Database host={}:{}>'.format(self.dbcfg['host'], self.dbcfg['port'])
 
     def __enter__(self):
         return self
@@ -139,7 +142,7 @@ class ZWMysqlConnection(object):
             self._close_cursor()
             raise StopIteration('Cursor contains no more rows.')
 
-    def execute(self, stmt, fetchall=True, commit=False, **params):
+    def execute(self, stmt, commit=False, fetchall=True, **params):
         '''use execute to run raw sql and we don't want multi stmt in operation(multi=False)
         '''
         params = params or {}
@@ -155,7 +158,7 @@ class ZWMysqlConnection(object):
             results.all()
         return results
 
-    def executemany(self, stmt, fetchall=True, commit=False, paramslist=None):
+    def executemany(self, stmt, paramslist=None, commit=False, fetchall=True):
         paramslist = paramslist or []
         # Execute the given query
         self._cursor = self._conn.cursor(buffered=False)
@@ -177,21 +180,21 @@ class ZWMysqlConnection(object):
         if params:
             vs = ' AND '.join(['{0}=%({0})s'.format(s) for s in ks])
             stmt += ' WHERE {}'.format(vs)
-        results = self.execute(stmt, fetchall=fetchall, commit=False, **params)
+        results = self.execute(stmt, commit=False, fetchall=fetchall, **params)
         return results
 
     def insert(self, tbl, recs):
-        if len(recs) == 0:
+        if recs is None or len(recs) == 0:
             return 0
         ks = recs[0].keys()
         fs = ','.join(ks)
         vs = ','.join(['%({})s'.format(s) for s in ks])
         stmt = 'INSERT INTO {} ({}) VALUES({})'.format(tbl, fs, vs)
-        rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
+        rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
         return rc._rows._cursor.rowcount
 
     def update(self, tbl, recs, keyflds):
-        if len(recs) == 0:
+        if recs is None or len(recs) == 0:
             return 0
         rec = recs[0]
         ks = rec.keys()
@@ -200,11 +203,11 @@ class ZWMysqlConnection(object):
         ws.append('1=1')
         ws = ' AND '.join(ws)
         stmt = 'UPDATE {} SET {} WHERE {}'.format(tbl, vs, ws)
-        rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
+        rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
         return rc._rows._cursor.rowcount
 
     def upsert(self, tbl, recs, keyflds):
-        if len(recs) == 0:
+        if recs is None or len(recs) == 0:
             return 0
         recs_update = []
         recs_insert = []
@@ -213,20 +216,21 @@ class ZWMysqlConnection(object):
         ws = ' AND '.join(ws)
         stmt = 'SELECT count(*) AS count FROM {} WHERE {}'.format(tbl, ws)
         for rec in recs:
-            r = self.execute(stmt, fetchall=True, commit=False, **rec)
+            r = self.execute(stmt, commit=False, fetchall=True, **rec)
             if r[0].count == 0:
                 recs_insert.append(rec)
             else:
                 recs_update.append(rec)
-        c = self.update(tbl, recs_update, keyflds) + self.insert(tbl, recs_insert)
-        return c
+        uc = self.update(tbl, recs_update, keyflds)
+        ui = self.insert(tbl, recs_insert)
+        return uc, ui
 
     def delete(self, tbl, recs, keyflds):
-        if len(recs) == 0:
+        if recs is None or len(recs) == 0:
             return 0
         ws = ['{0}=%({0})s'.format(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
         stmt = 'DELETE FROM {} WHERE {}'.format(tbl, ws)
-        rc = self.executemany(stmt, fetchall=False, commit=True, paramslist=recs)
+        rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
         return rc._rows._cursor.rowcount

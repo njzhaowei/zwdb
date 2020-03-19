@@ -103,7 +103,7 @@ class TestMysql:
         for rec in recs:
             r = db.find(tbl, id=rec['id'], fetchall=True)
             assert r[0].txt == rec['txt']
-        assert c == len(recs) and 3 == len(total_recs)
+        assert c[0]+c[1] == len(recs) and 3 == len(total_recs)
 
     @pytest.mark.parametrize(
         'recs, keyflds', (

@@ -136,6 +136,73 @@ class RecordCollection(object):
     def __repr__(self):
         return '<RecordCollection size={} pending={}>'.format(len(self), self.pending)
 
+class DocumentCollection(object):
+    """A set of Records from a query."""
+    def __init__(self, docs):
+        self._docs = docs
+        self._all_docs = []
+        self.pending = True
+
+    def all(self):
+        """Returns a list of all rows for the DocumentCollection. If they haven't
+        been fetched yet, consume the iterator and cache the results."""
+
+        # By calling list it calls the __iter__ method
+        docs = list(self)        
+        return docs
+
+    def __iter__(self):
+        """Iterate over all rows, consuming the underlying generator only when necessary."""
+        i = 0
+        while True:
+            # Other code may have iterated between yields,
+            # so always check the cache.
+            if i < len(self):
+                yield self[i]
+            else:
+                # Throws StopIteration when done.
+                # Prevent StopIteration bubbling from generator, following https://www.python.org/dev/peps/pep-0479/
+                try:
+                    yield next(self)
+                except StopIteration:
+                    return
+            i += 1
+
+    def __next__(self):
+        try:
+            nextdoc = next(self._docs)
+            nextrec = Record(o=nextdoc)
+            self._all_docs.append(nextrec)
+            return nextrec
+        except StopIteration:
+            self.pending = False
+            raise StopIteration('DocumentCollection contains no more docs.')
+
+    def __getitem__(self, key):
+        is_int = isinstance(key, int)
+
+        # Convert RecordCollection[1] into slice.
+        if is_int:
+            key = slice(key, key + 1)
+
+        while len(self) < key.stop or key.stop is None:
+            try:
+                next(self)
+            except StopIteration:
+                break
+
+        rows = self._all_docs[key]
+        if is_int:
+            return rows[0]
+        else:
+            return DocumentCollection(iter(rows))
+
+    def __len__(self):
+        return len(self._all_docs)
+
+    def __repr__(self):
+        return '<DocumentCollection size={} pending={}>'.format(len(self), self.pending)
+
 class ZwdbError(Exception):
     def __init__(self, arg):
         self.args = arg
