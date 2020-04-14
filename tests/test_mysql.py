@@ -66,6 +66,9 @@ class TestMysql:
         rs = db.find('tbl', fetchall=True, id=1, txt='abc')
         assert len(rs) == 1
 
+        rs = db.find('tbl', clause={'order by':'txt desc'}, fetchall=True)
+        assert len(rs) == 3
+
     @pytest.mark.parametrize(
         'recs', (
             [

@@ -60,9 +60,9 @@ class ZWMysql(object):
             recs = rs.all()
         return recs
     
-    def find(self, tbl, fetchall=False, **params):
+    def find(self, tbl, clause=None, fetchall=False, **params):
         conn = self.get_connection()
-        recs = conn.find(tbl, fetchall, **params)
+        recs = conn.find(tbl, clause, fetchall, **params)
         if fetchall:
             conn.close()
         return recs
@@ -172,7 +172,7 @@ class ZWMysqlConnection(object):
             results.all()
         return results
 
-    def find(self, tbl, fetchall=False, **params):
+    def find(self, tbl, clause=None, fetchall=False, **params):
         """select query
         """
         stmt = 'SELECT * FROM {}'.format(tbl)
@@ -180,6 +180,9 @@ class ZWMysqlConnection(object):
         if params:
             vs = ' AND '.join(['{0}=%({0})s'.format(s) for s in ks])
             stmt += ' WHERE {}'.format(vs)
+        if clause:
+            for k,v in clause.items():
+                stmt += ' {0} {1}'.format(k, v)
         results = self.execute(stmt, commit=False, fetchall=fetchall, **params)
         return results
     
