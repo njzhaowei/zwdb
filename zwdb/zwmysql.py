@@ -182,6 +182,14 @@ class ZWMysqlConnection(object):
             stmt += ' WHERE {}'.format(vs)
         results = self.execute(stmt, commit=False, fetchall=fetchall, **params)
         return results
+    
+    def exist(self, tbl, rec, keyflds):
+        ws = ['{0}=%({0})s'.format(k) for k in keyflds]
+        ws.append('1=1')
+        ws = ' AND '.join(ws)
+        stmt = 'SELECT count(*) AS count FROM {} WHERE {}'.format(tbl, ws)
+        r = self.execute(stmt, commit=False, fetchall=True, **rec)
+        return r[0].count != 0
 
     def insert(self, tbl, recs):
         if recs is None or len(recs) == 0:
@@ -211,19 +219,17 @@ class ZWMysqlConnection(object):
             return 0
         recs_update = []
         recs_insert = []
-        ws = ['{0}=%({0})s'.format(k) for k in keyflds]
-        ws.append('1=1')
-        ws = ' AND '.join(ws)
-        stmt = 'SELECT count(*) AS count FROM {} WHERE {}'.format(tbl, ws)
-        for rec in recs:
-            r = self.execute(stmt, commit=False, fetchall=True, **rec)
-            if r[0].count == 0:
-                recs_insert.append(rec)
+        for idx,rec in enumerate(recs):
+            if not self.exist(tbl, rec, keyflds):
+                if self._exist_in_recs(idx, recs, keyflds):
+                    recs_update.append(rec)
+                else:
+                    recs_insert.append(rec)
             else:
                 recs_update.append(rec)
+        ic = self.insert(tbl, recs_insert)
         uc = self.update(tbl, recs_update, keyflds)
-        ui = self.insert(tbl, recs_insert)
-        return uc, ui
+        return ic, uc
 
     def delete(self, tbl, recs, keyflds):
         if recs is None or len(recs) == 0:
@@ -234,3 +240,18 @@ class ZWMysqlConnection(object):
         stmt = 'DELETE FROM {} WHERE {}'.format(tbl, ws)
         rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
         return rc._rows._cursor.rowcount
+    
+    def _exist_in_recs(self, idx, recs, keyflds):
+        rec = recs[idx]
+        for i in range(idx):
+            r = recs[i]
+            is_equal = True
+            for k in keyflds:
+                if rec[k] != r[k]:
+                    is_equal = False
+                    break
+            if is_equal:
+                return True
+        return False
+        
+

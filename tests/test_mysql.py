@@ -93,16 +93,19 @@ class TestMysql:
 
     @pytest.mark.parametrize(
         'recs, keyflds', (
-            ([{'id':1, 'txt':'a'},{'id':3, 'txt':'c', 'num':3.0, 'dt':datetime.now()}],['id']),
+            ([{'id':1, 'txt':'a'},{'id':3, 'txt':'c', 'num':3.0, 'dt':datetime.now()}, {'id':3, 'txt':'haha'}],['id']),
         )
     )    
     def test_upsert(self, db, recs, keyflds):
         tbl = 'tbl_insert'
         c = db.upsert(tbl, recs, keyflds=keyflds)
         total_recs = db.find(tbl, fetchall=True)
-        for rec in recs:
+        for i,rec in enumerate(recs):
             r = db.find(tbl, id=rec['id'], fetchall=True)
-            assert r[0].txt == rec['txt']
+            if i == 1:
+                assert r[0].txt == 'haha'
+            else:
+                assert r[0].txt == rec['txt']
         assert c[0]+c[1] == len(recs) and 3 == len(total_recs)
 
     @pytest.mark.parametrize(
