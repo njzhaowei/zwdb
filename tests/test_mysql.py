@@ -27,7 +27,7 @@ def db():
             for t in tbls:
                 conn.execute(t, commit=True)
 
-            recs_insert = [{'id':1, 'txt':'abc'}, {'id':2, 'txt':'def'}, {'id':3, 'txt':'xxx'}]
+            recs_insert = [{'id':1, 'txt':'abc'}, {'id':2, 'txt':None}, {'id':3, 'txt':'xxx'}]
             ks = recs_insert[0].keys()
             fs = ','.join(ks)
             vs = ','.join(['%({})s'.format(s) for s in ks])
@@ -66,8 +66,8 @@ class TestMysql:
         rs = db.find('tbl', fetchall=True, id=1, txt='abc')
         assert len(rs) == 1
 
-        rs = db.find('tbl', clause={'order by':'txt desc'}, fetchall=True)
-        assert len(rs) == 3
+        rs = db.find('tbl', clause={'order by':'txt desc', 'limit':1}, txt=None, fetchall=True)
+        assert len(rs) == 1 and rs[0].id == 2
 
     @pytest.mark.parametrize(
         'recs', (

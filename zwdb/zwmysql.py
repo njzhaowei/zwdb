@@ -178,7 +178,7 @@ class ZWMysqlConnection(object):
         stmt = 'SELECT * FROM {}'.format(tbl)
         ks = params.keys()
         if params:
-            vs = ' AND '.join(['{0}=%({0})s'.format(s) for s in ks])
+            vs = ' AND '.join(['{0}=%({0})s'.format(s) if params[s] is not None else 'isnull({0})'.format(s) for s in ks])
             stmt += ' WHERE {}'.format(vs)
         if clause:
             for k,v in clause.items():
