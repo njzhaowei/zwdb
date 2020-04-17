@@ -60,5 +60,4 @@ class TestMongo:
         db.delby('hm', ['c', 'b'])
         db.delby('lt', [3, 4])
         db.delby('st', ['6', '7'])
-        a = 0
-
+        assert db.getby('hm', 'c') is None and db.getby('lt', 3) is None and len(db.get('st'))==3
