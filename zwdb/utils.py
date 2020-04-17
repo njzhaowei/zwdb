@@ -38,6 +38,6 @@ def db_url_parser(db_url):
         'port': r.port,
         'usr': r.username,
         'pwd': r.password,
-        'db': db,
+        'db': db.strip(),
         'props': props
     }

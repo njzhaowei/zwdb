@@ -1,25 +1,151 @@
+import os
+import warnings
 import traceback
-import redis
+from redis import Redis
+from redis.connection import BlockingConnectionPool
 
-from .logger import getLogger
-LOG = getLogger(__name__)
+from . import utils
 
-class MyRedis():
-    def __init__(self, cfg=None):
-        cfg = cfg or {}
+class ZWRedis():
+    """Class defining a Redis driver"""
+    def __init__(self, db_url, **kwargs):
+        self.db_url = db_url or os.environ.get('DATABASE_URL')
+        if not self.db_url:
+            raise ValueError('You must provide a db_url.')
+
+        o = utils.db_url_parser(db_url)
         self.dbcfg = {
-            'host'    : cfg['host'] if 'host' in cfg else 'localhost',
-            'port'    : cfg['port'] if 'port' in cfg else 6379
+            'host'      : o['host'],
+            'port'      : o['port'] or 6379,
+            'username'  : o['usr'],
+            'password'  : o['pwd'],
+            'db'        : o['db'] if 'db' in o and o['db'] and o['db'] != '' else 0,
+            'decode_responses' : True,
         }
-        self._pool = redis.ConnectionPool(
-            host=self.dbcfg['host'],
-            port=self.dbcfg['port'],
-            decode_responses=True)
-        self._conn = redis.Redis(connection_pool=self._pool)
+        try:
+            self.dbcfg['db'] = int(o['db'])
+        except (AttributeError, ValueError):
+            self.dbcfg['db'] = 0
 
-        self.dry_run = cfg['dry_run'] if 'dry_run' in cfg else False
-        if self.dry_run:
-            LOG.warning('Redis in dry run mod, nothing will store to db!!')
+        self.dbcfg.update(kwargs)
+        self._conn = Redis(connection_pool=BlockingConnectionPool(**self.dbcfg))
+    
+    def set(self, name, value):
+        rtn = None
+        if isinstance(value, str):
+            rtn = self._conn.set(name, value)
+        elif isinstance(value, dict):
+            rtn = self._conn.hmset(name, value)
+        elif isinstance(value, list):
+            self._conn.delete(name)
+            rtn = self._conn.rpush(name, *value)
+        elif isinstance(value, set):
+            self._conn.delete(name)
+            rtn = self._conn.sadd(name, *value)
+        else:
+            rtn = self._conn.set(name, value)
+        return rtn
+
+    def get(self, name):
+        rtn = None
+        t = self._conn.type(name)
+        if t == 'string':
+            rtn = self._conn.get(name)
+        elif t == 'hash':
+            rtn = self._conn.hgetall(name)
+        elif t == 'list':
+            rtn = self._conn.lrange(name, 0, -1)
+        elif t == 'set':
+            rtn = self._conn.smembers(name)
+        else:
+            rtn = self._conn.get(name)
+        return rtn
+
+    def setby(self, name, key, value):
+        '''key: key(hash) or index(list)
+        return None if not support
+        '''
+        rtn = None
+        t = self._conn.type(name)
+        if t == 'hash':
+            rtn = self._conn.hset(name, key, value)
+        elif t == 'list':
+            rtn = self._conn.lset(name, key, value)
+        return rtn
+    
+    def getby(self, name, key):
+        '''key: key(hash) or index(list)
+        return None if not support
+        '''
+        rtn = None
+        t = self._conn.type(name)
+        if t == 'hash':
+            rtn = self._conn.hget(name, key)
+        elif t == 'list':
+            rtn = self._conn.lindex(name, key)
+        return rtn
+    
+    def delby(self, name, keys):
+        '''keys: keys(hash) or indexes(list) or values(set)
+        return None if not support
+        '''
+        rtn = None
+        t = self._conn.type(name)
+        if t == 'hash':
+            rtn = self._conn.hdel(name, *keys)
+        elif t == 'list':
+            with self._conn.pipeline() as p:
+                p.multi()
+                for idx in keys:
+                    p.lset(name, idx, '__ZWREDIS_DELETED__')
+                rtn = p.lrem(name, 0, '__ZWREDIS_DELETED__')
+                p.execute()
+        elif t == 'set':
+            self._conn.srem(name, *keys)
+        return rtn
+    
+    def append(self, name, value):
+        rtn = None
+        t = self._conn.type(name)
+        if t == 'string':
+            rtn = self._conn.append(name, value)
+        elif t == 'hash':
+            rtn = self._conn.hmset(name, value)
+        elif t == 'list':
+            rtn = self._conn.rpush(name, *value)
+        elif t == 'set':
+            rtn = self._conn.sadd(name, *value)
+        else:
+            rtn = self._conn.append(name, value)
+        return rtn
+    
+    def contains(self, name, key):
+        '''key: key(hash) or value(list/set) or substring(string)'''
+        rtn = None
+        t = self._conn.type(name)
+        if t == 'string':
+            rtn = key in self._conn.get(name)
+        elif t == 'hash':
+            rtn = self._conn.hexists(name, key)
+        elif t == 'list':
+            with self._conn.pipeline() as p:
+                p.multi()
+                set_name = '_%s_tmp_set' % name
+                p.delete(set_name)
+                arr = self._conn.lrange(name, 0, -1)
+                p.sadd(set_name, *arr)
+                p.sismember(set_name, key)
+                p.delete(set_name)
+                rtn = p.execute()
+                rtn = rtn[2]
+        elif t == 'set':
+            rtn = self._conn.sismember(name, key)
+        else:
+            rtn = key in self._conn.get(name)
+        return rtn    
+
+    def delete(self, name):
+        return self._conn.delete(name)
 
     def exists(self, key):
         return self._conn.exists(key) == 1
@@ -27,5 +153,15 @@ class MyRedis():
     def dbsize(self):
         return self._conn.dbsize()
 
+    @property
     def conn(self):
         return self._conn
+
+    def __repr__(self):
+        return '<Database host={}:{}>'.format(self.dbcfg['host'], self.dbcfg['port'])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc, val, traceback):
+        self._conn.connection_pool.disconnect()
