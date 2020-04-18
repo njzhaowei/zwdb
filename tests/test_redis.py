@@ -12,7 +12,7 @@ def db():
     with ZWRedis(db_url) as db:
         yield db
 
-class TestMongo:
+class TestRedis:
     def test_set(self, db):
         db.set('a', 1)
         db.set('b', 'b')
@@ -27,7 +27,8 @@ class TestMongo:
         c = db.get('hm')
         d = db.get('lt')
         e = db.get('st')
-        assert a == '1' and b == 'b' and c['a'] == '1' and d[0] == '1' and len(e) == 3
+        t = db.get('a', data_type='string')
+        assert a == '1' and b == 'b' and c['a'] == '1' and d[0] == '1' and len(e) == 3 and t == '1'
     
     def test_append(self, db):
         db.append('a', 'aaa')
@@ -61,3 +62,11 @@ class TestMongo:
         db.delby('lt', [3, 4])
         db.delby('st', ['6', '7'])
         assert db.getby('hm', 'c') is None and db.getby('lt', 3) is None and len(db.get('st'))==3
+
+    def test_all(self, db):
+        arr = db.all()
+        trr = []
+        def cbf(k):
+            trr.append(k)
+        db.all_iter(cbfunc=cbf)
+        assert len(arr) == len(trr)

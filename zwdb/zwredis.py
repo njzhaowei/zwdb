@@ -30,6 +30,9 @@ class ZWRedis():
         self.dbcfg.update(kwargs)
         self._conn = Redis(connection_pool=BlockingConnectionPool(**self.dbcfg))
     
+    def close(self):
+        self._conn.connection_pool.disconnect()
+
     def set(self, name, value):
         rtn = None
         if isinstance(value, str):
@@ -46,9 +49,9 @@ class ZWRedis():
             rtn = self._conn.set(name, value)
         return rtn
 
-    def get(self, name):
+    def get(self, name, data_type=None):
         rtn = None
-        t = self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(name)
         if t == 'string':
             rtn = self._conn.get(name)
         elif t == 'hash':
@@ -61,36 +64,36 @@ class ZWRedis():
             rtn = self._conn.get(name)
         return rtn
 
-    def setby(self, name, key, value):
+    def setby(self, name, key, value, data_type=None):
         '''key: key(hash) or index(list)
         return None if not support
         '''
         rtn = None
-        t = self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(name)
         if t == 'hash':
             rtn = self._conn.hset(name, key, value)
         elif t == 'list':
             rtn = self._conn.lset(name, key, value)
         return rtn
     
-    def getby(self, name, key):
+    def getby(self, name, key, data_type=None):
         '''key: key(hash) or index(list)
         return None if not support
         '''
         rtn = None
-        t = self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(name)
         if t == 'hash':
             rtn = self._conn.hget(name, key)
         elif t == 'list':
             rtn = self._conn.lindex(name, key)
         return rtn
     
-    def delby(self, name, keys):
+    def delby(self, name, keys, data_type=None):
         '''keys: keys(hash) or indexes(list) or values(set)
         return None if not support
         '''
         rtn = None
-        t = self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(name)
         if t == 'hash':
             rtn = self._conn.hdel(name, *keys)
         elif t == 'list':
@@ -104,9 +107,9 @@ class ZWRedis():
             self._conn.srem(name, *keys)
         return rtn
     
-    def append(self, name, value):
+    def append(self, name, value, data_type=None):
         rtn = None
-        t = self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(name)
         if t == 'string':
             rtn = self._conn.append(name, value)
         elif t == 'hash':
@@ -119,10 +122,10 @@ class ZWRedis():
             rtn = self._conn.append(name, value)
         return rtn
     
-    def contains(self, name, key):
+    def contains(self, name, key, data_type=None):
         '''key: key(hash) or value(list/set) or substring(string)'''
         rtn = None
-        t = self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(name)
         if t == 'string':
             rtn = key in self._conn.get(name)
         elif t == 'hash':
@@ -142,7 +145,21 @@ class ZWRedis():
             rtn = self._conn.sismember(name, key)
         else:
             rtn = key in self._conn.get(name)
-        return rtn    
+        return rtn
+    
+    def all(self):
+        rtn = []
+        keys = self._conn.keys('*')
+        for key in keys:
+            rtn.append({
+                'key': key,
+                'value': self.get(key)
+            })
+        return rtn
+    
+    def all_iter(self, cbfunc):
+        for key in self._conn.scan_iter():
+            cbfunc(key)
 
     def delete(self, name):
         return self._conn.delete(name)
@@ -164,4 +181,4 @@ class ZWRedis():
         return self
 
     def __exit__(self, exc, val, traceback):
-        self._conn.connection_pool.disconnect()
+        self.close()
