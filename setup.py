@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import shutil
 from setuptools import setup, find_packages
 from codecs import open
 
@@ -11,6 +12,7 @@ packages = [pkg_name]
 requires = [s.strip() for s in open('requirements.txt').readlines()]
 test_requirements = [s.strip() for s in open('requirements_dev.txt').readlines()][4:]
 
+shutil.rmtree('dist', ignore_errors=True)
 about = {}
 with open(os.path.join(here, pkg_name, '__version__.py'), 'r', 'utf-8') as f:
     exec(f.read(), about)
