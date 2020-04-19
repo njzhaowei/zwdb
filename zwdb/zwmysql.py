@@ -86,20 +86,35 @@ class ZWMysql(object):
         with self.get_connection() as conn:
             rtn = conn.delete(tbl, recs, keyflds)
         return rtn
+    
+    def exec_script(self, fp):
+        with self.get_connection() as conn:
+            cursor = conn._conn.cursor()
+            statement = ''
+            for line in open(fp):
+                if line.strip().startswith('--'):  # ignore sql comment lines
+                    continue
+                if not line.strip().endswith(';'):  # keep appending lines that don't end in ';'
+                    statement = statement + line
+                else:  # when you get a line ending in ';' then exec statement and reset for next statement
+                    statement = statement + line
+                    cursor.execute(statement)
+                    statement = ''
+        return True
 
     @contextmanager
     def transaction(self):
         """A context manager for executing a transaction on this Database."""
-        pass
-        # conn = self.get_connection()
-        # tx = conn.transaction()
-        # try:
-        #     yield conn
-        #     tx.commit()
-        # except:
-        #     tx.rollback()
-        # finally:
-        #     conn.close()
+        conn = self.get_connection()
+        _conn = conn._conn
+        tx = _conn.transaction()
+        try:
+            yield conn
+            tx.commit()
+        except:
+            tx.rollback()
+        finally:
+            _conn.close()
 
     def __repr__(self):
         return '<Database host={}:{}>'.format(self.dbcfg['host'], self.dbcfg['port'])

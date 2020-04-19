@@ -36,7 +36,7 @@ def db():
         yield dbobj
         # clean
         with dbobj.get_connection() as conn:
-            tbls = ['tbl', 'tbl_insert']
+            tbls = ['tbl', 'tbl_insert', 'tbl_create']
             for t in tbls:
                 conn.execute('DROP TABLE IF EXISTS %s'%t, commit=True)
 
@@ -121,3 +121,9 @@ class TestMysql:
         c = db.delete('tbl_insert', recs, keyflds=keyflds)
         total_recs = db.find(tbl, fetchall=True)
         assert c == 2 and 1 == len(total_recs)
+    
+    def test_exec_script(self, db):
+        r = db.exec_script('data/tbl_create.sql')
+        with db.get_connection() as conn:
+            rs = conn.execute("show tables like 'tbl_create';", fetchall=True)
+        assert len(rs) == 1

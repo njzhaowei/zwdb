@@ -7,7 +7,7 @@ from codecs import open
 here = os.path.abspath(os.path.dirname(__file__))
 
 pkg_name = 'zwdb'
-packages = [pkg_name]
+packages = find_packages()
 
 requires = [s.strip() for s in open('requirements.txt').readlines()]
 test_requirements = [s.strip() for s in open('requirements_dev.txt').readlines()][4:]
