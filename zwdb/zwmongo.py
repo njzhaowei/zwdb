@@ -206,4 +206,5 @@ class ZWMongoConnection(object):
 
     def count(self, coll, conds=None):
         conds = conds or {}
-        return self._db[coll].count_documents(conds)
+        # return self._db[coll].count_documents(conds)
+        return self._db[coll].count(conds)
