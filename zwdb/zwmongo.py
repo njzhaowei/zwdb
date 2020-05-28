@@ -2,6 +2,7 @@ import time
 import pymongo
 from pymongo import UpdateOne, DeleteOne
 from pymongo.errors import ConnectionFailure
+from operator import itemgetter
 
 from . import utils
 from .records import Record, DocumentCollection, ZwdbError
@@ -64,6 +65,11 @@ class ZWMongo(object):
         if fetchall:
             conn.close()
         return docs
+    
+    def groupby(self, coll, key=None, conds=None, reverse=False):
+        with self.get_connection() as conn:
+            rtn = conn.groupby(coll, key, conds, reverse)
+        return rtn
 
     def insert(self, coll, recs, ordered=False):
         with self.get_connection() as conn:
@@ -88,7 +94,7 @@ class ZWMongo(object):
     def count(self, coll, conds=None):
         with self.get_connection() as conn:
             rtn = conn.count(coll, conds)
-        return rtn        
+        return rtn
 
     def drop_collection(self, coll):
         return self.client[self.dbname].drop_collection(coll)
@@ -146,6 +152,20 @@ class ZWMongoConnection(object):
         if fetchall:
             results.all()
         return results
+    
+    def groupby(self, coll, key='_id', conds=None, reverse=False):
+        conds = conds or {}
+        group = {
+            '_id': "$%s" % key,
+            'count': {'$sum': 1}
+        }
+        results = self._db[coll].aggregate([
+            {'$match': conds},
+            {'$group': group},
+        ])
+        rtn = list(results)
+        rtn.sort(key=itemgetter('count'), reverse=reverse)
+        return rtn
 
     def insert(self, coll, recs, ordered=False):
         if recs is None or len(recs) == 0:

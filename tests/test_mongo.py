@@ -97,3 +97,8 @@ class TestMongo:
         coll = 'col_insert'
         c = db.count(coll)
         assert c == 9
+
+    def test_groupby(self, db):
+        coll = 'col_insert'
+        recs = db.groupby(coll, 'txt', reverse=True)
+        assert recs[0]['_id'] == 'a'
