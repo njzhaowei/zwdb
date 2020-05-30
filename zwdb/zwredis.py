@@ -33,118 +33,133 @@ class ZWRedis():
     def close(self):
         self._conn.connection_pool.disconnect()
 
-    def set(self, name, value):
+    def set(self, key, value):
         rtn = None
         if isinstance(value, str):
-            rtn = self._conn.set(name, value)
+            rtn = self._conn.set(key, value)
         elif isinstance(value, dict):
-            rtn = self._conn.hmset(name, value)
+            rtn = self._conn.hmset(key, value)
         elif isinstance(value, list):
-            self._conn.delete(name)
-            rtn = self._conn.rpush(name, *value)
+            self._conn.delete(key)
+            rtn = self._conn.rpush(key, *value)
         elif isinstance(value, set):
-            self._conn.delete(name)
-            rtn = self._conn.sadd(name, *value)
+            self._conn.delete(key)
+            rtn = self._conn.sadd(key, *value)
         else:
-            rtn = self._conn.set(name, value)
+            rtn = self._conn.set(key, value)
         return rtn
 
-    def get(self, name, data_type=None):
+    def get(self, key, data_type=None):
         rtn = None
-        t = data_type if data_type is not None else self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(key)
         if t == 'string':
-            rtn = self._conn.get(name)
+            rtn = self._conn.get(key)
         elif t == 'hash':
-            rtn = self._conn.hgetall(name)
+            rtn = self._conn.hgetall(key)
         elif t == 'list':
-            rtn = self._conn.lrange(name, 0, -1)
+            rtn = self._conn.lrange(key, 0, -1)
         elif t == 'set':
-            rtn = self._conn.smembers(name)
+            rtn = self._conn.smembers(key)
         else:
-            rtn = self._conn.get(name)
+            rtn = self._conn.get(key)
         return rtn
 
-    def setby(self, name, key, value, data_type=None):
+    def setby(self, key, field, value, data_type=None):
         '''key: key(hash) or index(list)
         return None if not support
         '''
         rtn = None
-        t = data_type if data_type is not None else self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(key)
         if t == 'hash':
-            rtn = self._conn.hset(name, key, value)
+            rtn = self._conn.hset(key, field, value)
         elif t == 'list':
-            rtn = self._conn.lset(name, key, value)
+            rtn = self._conn.lset(key, field, value)
         return rtn
     
-    def getby(self, name, key, data_type=None):
+    def getby(self, key, field, data_type=None):
         '''key: key(hash) or index(list)
         return None if not support
         '''
         rtn = None
-        t = data_type if data_type is not None else self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(key)
         if t == 'hash':
-            rtn = self._conn.hget(name, key)
+            rtn = self._conn.hget(key, field)
         elif t == 'list':
-            rtn = self._conn.lindex(name, key)
+            rtn = self._conn.lindex(key, field)
         return rtn
     
-    def delby(self, name, keys, data_type=None):
-        '''keys: keys(hash) or indexes(list) or values(set)
+    def delby(self, key, fields, data_type=None):
+        '''fields: fields(hash) or indexes(list) or values(set)
         return None if not support
         '''
         rtn = None
-        t = data_type if data_type is not None else self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(key)
         if t == 'hash':
-            rtn = self._conn.hdel(name, *keys)
+            rtn = self._conn.hdel(key, *fields)
         elif t == 'list':
             with self._conn.pipeline() as p:
                 p.multi()
-                for idx in keys:
-                    p.lset(name, idx, '__ZWREDIS_DELETED__')
-                rtn = p.lrem(name, 0, '__ZWREDIS_DELETED__')
+                for idx in fields:
+                    p.lset(key, idx, '__ZWREDIS_DELETED__')
+                rtn = p.lrem(key, 0, '__ZWREDIS_DELETED__')
                 p.execute()
         elif t == 'set':
-            self._conn.srem(name, *keys)
+            self._conn.srem(key, *fields)
         return rtn
     
-    def append(self, name, value, data_type=None):
+    def append(self, key, value, data_type=None):
         rtn = None
-        t = data_type if data_type is not None else self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(key)
         if t == 'string':
-            rtn = self._conn.append(name, value)
+            rtn = self._conn.append(key, value)
         elif t == 'hash':
-            rtn = self._conn.hmset(name, value)
+            rtn = self._conn.hmset(key, value)
         elif t == 'list':
-            rtn = self._conn.rpush(name, *value)
+            rtn = self._conn.rpush(key, *value)
         elif t == 'set':
-            rtn = self._conn.sadd(name, *value)
+            rtn = self._conn.sadd(key, *value)
         else:
-            rtn = self._conn.append(name, value)
+            rtn = self._conn.append(key, value)
         return rtn
     
-    def contains(self, name, key, data_type=None):
+    def contains(self, key, field, data_type=None):
         '''key: key(hash) or value(list/set) or substring(string)'''
         rtn = None
-        t = data_type if data_type is not None else self._conn.type(name)
+        t = data_type if data_type is not None else self._conn.type(key)
         if t == 'string':
-            rtn = key in self._conn.get(name)
+            rtn = field in self._conn.get(field)
         elif t == 'hash':
-            rtn = self._conn.hexists(name, key)
+            rtn = self._conn.hexists(key, field)
         elif t == 'list':
             with self._conn.pipeline() as p:
                 p.multi()
-                set_name = '_%s_tmp_set' % name
+                set_name = '_%s_tmp_set' % key
                 p.delete(set_name)
-                arr = self._conn.lrange(name, 0, -1)
+                arr = self._conn.lrange(key, 0, -1)
                 p.sadd(set_name, *arr)
-                p.sismember(set_name, key)
+                p.sismember(set_name, field)
                 p.delete(set_name)
                 rtn = p.execute()
                 rtn = rtn[2]
         elif t == 'set':
-            rtn = self._conn.sismember(name, key)
+            rtn = self._conn.sismember(key, field)
         else:
-            rtn = key in self._conn.get(name)
+            rtn = field in self._conn.get(field)
+        return rtn
+    
+    def len(self, key, data_type=None):
+        rtn = None
+        t = data_type if data_type is not None else self._conn.type(key)
+        if t == 'string':
+            rtn = self._conn.strlen(key)
+        elif t == 'hash':
+            rtn = self._conn.hlen(key)
+        elif t == 'list':
+            rtn = self._conn.llen(key)
+        elif t == 'set':
+            rtn = self._conn.scard(key)
+        else:
+            rtn = self._conn.strlen(key)
         return rtn
     
     def all(self):

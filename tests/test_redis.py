@@ -70,3 +70,14 @@ class TestRedis:
             trr.append(k)
         db.all_iter(cbfunc=cbf)
         assert len(arr) == len(trr)
+    
+    def test_len(self, db):
+        db.set('strlen', 'abc')
+        db.set('hmlen', {'a':1, 'b':2, 'c': 3, 'd':4})
+        db.set('listlen', ['a', 'b', 'c', 'd', 'e'])
+        db.set('setlen', {'a', 'b', 'c', 'd', 'e', 'f'})
+        r0 = db.len('strlen')
+        r1 = db.len('hmlen')
+        r2 = db.len('listlen')
+        r3 = db.len('setlen')
+        assert r0 == 3 and r1 == 4 and r2 == 5 and r3 == 6
