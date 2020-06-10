@@ -24,7 +24,19 @@
             "module": "pytest",
             "args": [
                 "-v",
+                "-s",
                 "${file}"
+            ],
+            "cwd": "${workspaceRoot}"
+        },{
+            "name": "PyTest: All",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "-v",
+                "-s",
+                "${workspaceFolder}/tests"
             ],
             "cwd": "${workspaceRoot}"
         }
