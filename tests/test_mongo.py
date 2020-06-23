@@ -10,12 +10,12 @@ from zwdb.zwmongo import ZWMongo
 def db():
     db_url = 'mongo://tester:test@localhost/testdb'
     with ZWMongo(db_url, maxPoolSize=50) as mydb:
-        recs = [{'txt':'a', 'num':1.0, 'none':None},{'txt':'b', 'num':2.0, 'none':None}]
-        mydb.insert('col', recs)
-        yield mydb
         colls = ['col', 'col_insert']
         for coll in colls:
             mydb.drop_collection(coll)
+        recs = [{'txt':'a', 'num':1.0, 'none':None},{'txt':'b', 'num':2.0, 'none':None}]
+        mydb.insert('col', recs)
+        yield mydb
 
 class TestMongo:
     def test_list(self, db):
@@ -102,3 +102,7 @@ class TestMongo:
         coll = 'col_insert'
         recs = db.groupby(coll, 'txt', reverse=True)
         assert recs[0]['_id'] == 'a'
+    
+    def test_exists(self, db):
+        assert db.exists('col', {'num': 1})
+        assert not db.exists('col', {'num': 3})

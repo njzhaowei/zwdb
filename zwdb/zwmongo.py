@@ -95,6 +95,11 @@ class ZWMongo(object):
         with self.get_connection() as conn:
             rtn = conn.count(coll, conds)
         return rtn
+    
+    def exists(self, coll, conds):
+        with self.get_connection() as conn:
+            rtn = conn.exists(coll, conds)
+        return rtn        
 
     def drop_collection(self, coll):
         return self.client[self.dbname].drop_collection(coll)
@@ -228,3 +233,9 @@ class ZWMongoConnection(object):
         conds = conds or {}
         # return self._db[coll].count_documents(conds)
         return self._db[coll].count(conds)
+    
+    def exists(self, coll, conds):
+        if not conds:
+            return False
+        r = list(self._db[coll].find(conds, projection={'_id': 1}, limit=1))
+        return True if len(r)==1 else False
