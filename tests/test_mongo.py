@@ -106,3 +106,18 @@ class TestMongo:
     def test_exists(self, db):
         assert db.exists('col', {'num': 1})
         assert not db.exists('col', {'num': 3})
+    
+    def test_leftjoin(self, db):
+        coll = 'col'
+        coll_right = 'col_insert'
+        recs = [{'id': 'lj01', 'txt': 'lj01'},{'id': 'lj02', 'txt': 'lj02'}]
+        recs_rignt = [{'id': 'lj01', 'num': 999},{'id': 'lj02', 'num': 666}]
+        db.insert(coll, recs)
+        db.insert(coll_right, recs_rignt)
+
+        r = db.leftjoin(coll, coll_right, fld='id', fld_right='id', nameas='rec', match={'id': 'lj01'}, fetchall=True, project={'_id':0})
+        assert len(r)==1 and r[0].rec[0]['num'] == 999
+
+        db.delete(coll, recs, keyflds=['id'])
+        db.delete(coll_right, recs_rignt, keyflds=['id'])
+

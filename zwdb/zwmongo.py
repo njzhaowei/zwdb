@@ -22,7 +22,7 @@ class ZWMongo(object):
         self.dbname = o['db']
         self.dbcfg.update(kwargs)
         cfg = {
-            'maxPoolSize' : 100
+            'maxPoolSize' : 500
         }
         for p in cfg:
             self.dbcfg[p] = self.dbcfg.get(p, cfg[p])
@@ -103,6 +103,13 @@ class ZWMongo(object):
 
     def drop_collection(self, coll):
         return self.client[self.dbname].drop_collection(coll)
+    
+    def leftjoin(self, coll, coll_right, fld, fld_right, nameas, match=None, fetchall=False, **params):
+        conn = self.get_connection()
+        rtn = conn.leftjoin(coll, coll_right, fld, fld_right, nameas, match, fetchall, **params)
+        if fetchall:
+            conn.close()
+        return rtn
 
     def __repr__(self):
         return '<Database host={}:{}>'.format(self.dbcfg['host'], self.dbcfg['port'])
@@ -239,3 +246,28 @@ class ZWMongoConnection(object):
             return False
         r = list(self._db[coll].find(conds, projection={'_id': 1}, limit=1))
         return True if len(r)==1 else False
+
+    def leftjoin(self, coll, coll_right, fld, fld_right, nameas, match=None, fetchall=False, **params):
+        match = match or {}
+        query = [{
+            '$lookup': {
+                'from'          : coll_right,
+                'localField'    : fld,
+                'foreignField'  : fld_right,
+                'as'            : nameas
+            }
+        },{
+            '$match': match
+        }]
+        
+        for p in params:
+            pstr = '$'+p
+            query.append({
+                pstr: params[p]
+            })
+
+        self._cursor = self._db[coll].aggregate(query)
+        results = DocumentCollection(self)
+        if fetchall:
+            results.all()
+        return results
