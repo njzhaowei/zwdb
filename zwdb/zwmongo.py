@@ -67,7 +67,7 @@ class ZWMongo(object):
         return docs
     
     def findone(self, coll, conds=None, projection=None, sort=None, limit=0, **params):
-        recs = self.find(coll, conds=None, projection=None, sort=None, limit=0, fetchall=True, **params)
+        recs = self.find(coll, conds, projection, sort, limit, True, **params)
         return recs[0] if len(recs)>0 else None
 
     def groupby(self, coll, key=None, conds=None, reverse=False):
