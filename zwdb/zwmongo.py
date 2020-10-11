@@ -19,6 +19,7 @@ class ZWMongo(object):
             'username'  : o['usr'],
             'password'  : o['pwd']
         }
+        self.dburl = db_url
         self.dbname = o['db']
         self.dbcfg.update(kwargs)
         cfg = {
