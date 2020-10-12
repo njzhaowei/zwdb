@@ -100,7 +100,7 @@ class TestMongo:
 
     def test_groupby(self, db):
         coll = 'col_insert'
-        recs = db.groupby(coll, 'txt', reverse=True)
+        recs = db.groupby(coll, 'txt', sort={'count': -1})
         assert recs[0]['_id'] == 'a'
     
     def test_exists(self, db):

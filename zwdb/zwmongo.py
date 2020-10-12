@@ -71,9 +71,9 @@ class ZWMongo(object):
         recs = self.find(coll, conds, projection, sort, limit, True, **params)
         return recs[0] if len(recs)>0 else None
 
-    def groupby(self, coll, key=None, conds=None, reverse=False):
+    def groupby(self, coll, key=None, conds=None, sort=None, limit=0):
         with self.get_connection() as conn:
-            rtn = conn.groupby(coll, key, conds, reverse)
+            rtn = conn.groupby(coll, key, conds, sort, limit)
         return rtn
 
     def insert(self, coll, recs, ordered=False):
@@ -170,18 +170,25 @@ class ZWMongoConnection(object):
             results.all()
         return results
     
-    def groupby(self, coll, key='_id', conds=None, reverse=False):
+    def groupby(self, coll, key='_id', conds=None, sort=None, limit=0):
         conds = conds or {}
+        sort = sort or {'count': 1}
         group = {
             '_id': "$%s" % key,
             'count': {'$sum': 1}
         }
-        results = self._db[coll].aggregate([
+        query = [
             {'$match': conds},
             {'$group': group},
-        ])
+            {'$sort': sort}
+        ]
+        if limit:
+            query.append({
+                '$limit': limit
+            })
+        results = self._db[coll].aggregate(query)
         rtn = list(results)
-        rtn.sort(key=itemgetter('count'), reverse=reverse)
+        # rtn.sort(key=itemgetter('count'), reverse=reverse)
         return rtn
 
     def insert(self, coll, recs, ordered=False):
