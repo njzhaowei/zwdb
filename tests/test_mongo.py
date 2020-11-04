@@ -68,6 +68,19 @@ class TestMongo:
             assert r[0].txt == rec['txt']
         assert c == len(recs)
 
+        r = db.findone(coll, conds={'id': recs[0]['id']})
+        r = r.as_dict()
+        old = r['txt']
+        r['txt'] = 'bbb'
+        db.update(coll, recs=[r], keyflds=['_id'])
+        r = db.findone(coll, conds={'id': recs[0]['id']})
+        assert r.txt == 'bbb'
+        r = r.as_dict()
+        r['_id'] = str(r['_id'])
+        r['txt'] = old
+        db.update(coll, recs=[r], keyflds=['_id'])
+        assert r.txt == old
+
     @pytest.mark.parametrize(
         'recs, keyflds', (
             ([{'id':0, 'txt':'aaa'},{'id':11, 'txt':'a', 'num':11}],['id']),

@@ -3,6 +3,7 @@ import pymongo
 from pymongo import UpdateOne, DeleteOne
 from pymongo.errors import ConnectionFailure
 from operator import itemgetter
+from bson.objectid import ObjectId
 
 from . import utils
 from .records import Record, DocumentCollection, ZwdbError
@@ -82,16 +83,25 @@ class ZWMongo(object):
         return rtn
 
     def update(self, coll, recs, keyflds=None):
+        for rec in recs:
+            if '_id' in rec:
+                rec['_id'] = rec['_id'] if isinstance(rec['_id'], ObjectId) else ObjectId(rec['_id'])
         with self.get_connection() as conn:
             rtn = conn.update(coll, recs, keyflds)
         return rtn
 
     def upsert(self, coll, recs, keyflds=None):
+        for rec in recs:
+            if '_id' in rec:
+                rec['_id'] = rec['_id'] if isinstance(rec['_id'], ObjectId) else ObjectId(rec['_id'])
         with self.get_connection() as conn:
             rtn = conn.upsert(coll, recs, keyflds)
         return rtn
     
     def delete(self, coll, recs, keyflds=None):
+        for rec in recs:
+            if '_id' in rec:
+                rec['_id'] = rec['_id'] if isinstance(rec['_id'], ObjectId) else ObjectId(rec['_id'])
         with self.get_connection() as conn:
             rtn = conn.delete(coll, recs, keyflds)
         return rtn
