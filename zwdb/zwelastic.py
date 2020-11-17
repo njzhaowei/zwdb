@@ -27,7 +27,7 @@ class ZWElastic(object):
         pgfrom = pgnum*pgsize
         body['from'] = pgfrom
         body['size'] = pgsize
-        return self.es.search(index=index, body=body)
+        return self.es.search(index=index, body=body, **params)
     
     def create_index(self, index, body=None):
         rtn = None
