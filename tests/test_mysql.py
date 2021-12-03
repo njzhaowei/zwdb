@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from _pytest.mark import param
 import pytest
 import os
 import sys
@@ -98,7 +99,7 @@ class TestMysql:
         'recs, keyflds', (
             ([{'id':1, 'txt':'a'},{'id':3, 'txt':'c', 'num':3.0, 'dt':datetime.now()}, {'id':3, 'txt':'haha'}],['id']),
         )
-    )    
+    )
     def test_upsert(self, db, recs, keyflds):
         tbl = 'tbl_insert'
         c = db.upsert(tbl, recs, keyflds=keyflds)
@@ -118,9 +119,18 @@ class TestMysql:
     )
     def test_delete(self, db, recs, keyflds):
         tbl = 'tbl_insert'
-        c = db.delete('tbl_insert', recs, keyflds=keyflds)
+        c = db.delete(tbl, recs, keyflds=keyflds)
         total_recs = db.find(tbl, fetchall=True)
         assert c == 2 and 1 == len(total_recs)
+
+    @pytest.mark.parametrize(
+        'stmt, params', (
+            ('select * from tbl where txt=%(txt)s', {'txt': 'abc'}),
+        )
+    )
+    def test_select(self, db, stmt, params):
+        r = db.select(stmt, **params)
+        assert r and len(r) == 1
     
     def test_exec_script(self, db):
         r = db.exec_script('data/tbl_create.sql')

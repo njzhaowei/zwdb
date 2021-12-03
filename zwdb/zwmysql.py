@@ -86,7 +86,14 @@ class ZWMysql(object):
         with self.get_connection() as conn:
             rtn = conn.delete(tbl, recs, keyflds)
         return rtn
-    
+
+    def select(self, stmt, fetchall=True, **params):
+        conn = self.get_connection()
+        rtn =  conn.execute(stmt, fetchall=fetchall, **params)
+        if fetchall:
+            conn.close()
+        return rtn
+
     def exec_script(self, fp):
         with self.get_connection() as conn:
             cursor = conn._conn.cursor()
