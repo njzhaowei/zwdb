@@ -167,6 +167,7 @@ class ZWMysqlConnection(object):
     def execute(self, stmt, commit=False, fetchall=True, **params):
         '''use execute to run raw sql and we don't want multi stmt in operation(multi=False)
         '''
+        print('%s <= %s'%(stmt, params))
         params = params or {}
         # Execute the given query
         self._cursor = self._conn.cursor(buffered=False)
