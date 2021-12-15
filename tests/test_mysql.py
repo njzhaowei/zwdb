@@ -7,9 +7,9 @@ from datetime import datetime
 
 from zwdb.zwmysql import ZWMysql
 
+db_url = 'mysql://tester:test@localhost/testdb'
 @pytest.fixture(scope='module')
 def db():
-    db_url = 'mysql://tester:test@localhost/testdb'
     with ZWMysql(db_url) as dbobj:
         with dbobj.get_connection() as conn:
             tbl = 'CREATE TABLE `tbl` ( \
@@ -137,3 +137,11 @@ class TestMysql:
         with db.get_connection() as conn:
             rs = conn.execute("show tables like 'tbl_create';", fetchall=True)
         assert len(rs) == 1
+    
+    def test_empty_exist(self, db):
+        try:
+            with ZWMysql(db_url) as o:
+                pass
+        except AttributeError:
+            assert False
+        assert True

@@ -52,7 +52,8 @@ class ZWMysql(object):
         return ZWMysqlConnection(conn)
 
     def close(self):
-        self._pool._remove_connections()
+        if self._pool:
+            self._pool._remove_connections()
 
     def lists(self):
         with self.get_connection() as conn:
