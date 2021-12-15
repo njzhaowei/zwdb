@@ -34,6 +34,7 @@ class ZWMysql(object):
         }
         for p in cfg:
             self.dbcfg[p] = self.dbcfg.get(p, cfg[p])
+        self._debug = False
         self._pool = None
 
     @property
@@ -49,7 +50,7 @@ class ZWMysql(object):
         if not self._pool:
             self._pool = mysql.connector.pooling.MySQLConnectionPool(**self.dbcfg)
         conn = self._pool.get_connection()
-        return ZWMysqlConnection(conn)
+        return ZWMysqlConnection(conn, debug=self._debug)
 
     def close(self):
         if self._pool:
@@ -67,6 +68,11 @@ class ZWMysql(object):
         if fetchall:
             conn.close()
         return recs
+    
+    def exists(self, tbl, rec, keyflds):
+        with self.get_connection() as conn:
+            rtn = conn.exists(tbl, rec, keyflds)
+        return rtn
     
     def insert(self, tbl, recs):
         with self.get_connection() as conn:
@@ -134,10 +140,11 @@ class ZWMysql(object):
         self.close()
 
 class ZWMysqlConnection(object):
-    def __init__(self, conn):
+    def __init__(self, conn, debug=False):
         self._conn = conn
         self._cursor = None
         self.open = True
+        self._debug = debug
 
     def __enter__(self):
         return self
@@ -168,7 +175,8 @@ class ZWMysqlConnection(object):
     def execute(self, stmt, commit=False, fetchall=True, **params):
         '''use execute to run raw sql and we don't want multi stmt in operation(multi=False)
         '''
-        print('%s <= %s'%(stmt, params))
+        if self._debug:
+            print('%s <= %s'%(stmt, params))
         params = params or {}
         # Execute the given query
         self._cursor = self._conn.cursor(buffered=False)
@@ -210,7 +218,7 @@ class ZWMysqlConnection(object):
         results = self.execute(stmt, commit=False, fetchall=fetchall, **params)
         return results
     
-    def exist(self, tbl, rec, keyflds):
+    def exists(self, tbl, rec, keyflds):
         ws = ['{0}=%({0})s'.format(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
@@ -247,7 +255,7 @@ class ZWMysqlConnection(object):
         recs_update = []
         recs_insert = []
         for idx,rec in enumerate(recs):
-            if not self.exist(tbl, rec, keyflds):
+            if not self.exists(tbl, rec, keyflds):
                 if self._exist_in_recs(idx, recs, keyflds):
                     recs_update.append(rec)
                 else:
@@ -280,5 +288,3 @@ class ZWMysqlConnection(object):
             if is_equal:
                 return True
         return False
-        
-
