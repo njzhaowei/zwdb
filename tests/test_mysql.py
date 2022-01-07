@@ -145,3 +145,7 @@ class TestMysql:
         except AttributeError:
             assert False
         assert True
+    
+    def test_findone(self, db):
+        r = db.findone('tbl', id=1)
+        assert r

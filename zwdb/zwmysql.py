@@ -5,7 +5,7 @@ import mysql.connector
 import mysql.connector.pooling
 
 from . import utils
-from .records import Record, RecordCollection
+from .records import RecordCollection
 
 class ZWMysql(object):
     """Class defining a MySQL driver"""
@@ -32,8 +32,8 @@ class ZWMysql(object):
             'use_pure'  : False,
             'pool_size' : 5
         }
-        for p in cfg:
-            self.dbcfg[p] = self.dbcfg.get(p, cfg[p])
+        for k,v in cfg.items():
+            self.dbcfg[k] = self.dbcfg.get(k, v)
         self._debug = False
         self._pool = None
 
@@ -54,6 +54,7 @@ class ZWMysql(object):
 
     def close(self):
         if self._pool:
+            # pylint: disable=protected-access
             self._pool._remove_connections()
 
     def lists(self):
@@ -61,29 +62,37 @@ class ZWMysql(object):
             rs = conn.execute('SHOW TABLES')
             recs = rs.all()
         return recs
-    
+
     def find(self, tbl, clause=None, fetchall=False, **params):
         conn = self.get_connection()
         recs = conn.find(tbl, clause, fetchall, **params)
         if fetchall:
             conn.close()
         return recs
-    
+
+    def findone(self, tbl, clause=None, **params):
+        conn = self.get_connection()
+        clause = clause or {}
+        clause['LIMIT'] = 1
+        recs = conn.find(tbl, clause, True, **params)
+        conn.close()
+        return recs[0] if len(recs)>0 else None
+
     def exists(self, tbl, rec, keyflds):
         with self.get_connection() as conn:
             rtn = conn.exists(tbl, rec, keyflds)
         return rtn
-    
+
     def insert(self, tbl, recs):
         with self.get_connection() as conn:
             rtn = conn.insert(tbl, recs)
         return rtn
-    
+
     def update(self, tbl, recs, keyflds):
         with self.get_connection() as conn:
             rtn = conn.update(tbl, recs, keyflds)
         return rtn
-    
+
     def upsert(self, tbl, recs, keyflds):
         with self.get_connection() as conn:
             rtn = conn.upsert(tbl, recs, keyflds)
@@ -103,29 +112,32 @@ class ZWMysql(object):
 
     def exec_script(self, fp):
         with self.get_connection() as conn:
+            # pylint: disable=protected-access
             cursor = conn._conn.cursor()
             statement = ''
-            for line in open(fp):
-                if line.strip().startswith('--'):  # ignore sql comment lines
-                    continue
-                if not line.strip().endswith(';'):  # keep appending lines that don't end in ';'
-                    statement = statement + line
-                else:  # when you get a line ending in ';' then exec statement and reset for next statement
-                    statement = statement + line
-                    cursor.execute(statement)
-                    statement = ''
+            with open(fp, encoding='utf-8') as fs:
+                for line in fs:
+                    if line.strip().startswith('--'):  # ignore sql comment lines
+                        continue
+                    if not line.strip().endswith(';'):  # keep appending lines that don't end in ';'
+                        statement = statement + line
+                    else:  # when you get a line ending in ';' then exec statement and reset for next statement
+                        statement = statement + line
+                        cursor.execute(statement)
+                        statement = ''
         return True
 
     @contextmanager
     def transaction(self):
         """A context manager for executing a transaction on this Database."""
         conn = self.get_connection()
+        # pylint: disable=protected-access
         _conn = conn._conn
         tx = _conn.transaction()
         try:
             yield conn
             tx.commit()
-        except:
+        except Exception:
             tx.rollback()
         finally:
             _conn.close()
@@ -156,7 +168,6 @@ class ZWMysqlConnection(object):
         self._close_cursor()
         self._conn.close()
         self.open = False
-    
     def _close_cursor(self):
         if self._cursor:
             self._cursor.close()
@@ -217,7 +228,7 @@ class ZWMysqlConnection(object):
                 stmt += ' {0} {1}'.format(k, v)
         results = self.execute(stmt, commit=False, fetchall=fetchall, **params)
         return results
-    
+
     def exists(self, tbl, rec, keyflds):
         ws = ['{0}=%({0})s'.format(k) for k in keyflds]
         ws.append('1=1')
@@ -234,6 +245,7 @@ class ZWMysqlConnection(object):
         vs = ','.join(['%({})s'.format(s) for s in ks])
         stmt = 'INSERT INTO {} ({}) VALUES({})'.format(tbl, fs, vs)
         rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
+        # pylint: disable=protected-access
         return rc._rows._cursor.rowcount
 
     def update(self, tbl, recs, keyflds):
@@ -247,6 +259,7 @@ class ZWMysqlConnection(object):
         ws = ' AND '.join(ws)
         stmt = 'UPDATE {} SET {} WHERE {}'.format(tbl, vs, ws)
         rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
+        # pylint: disable=protected-access
         return rc._rows._cursor.rowcount
 
     def upsert(self, tbl, recs, keyflds):
@@ -274,8 +287,9 @@ class ZWMysqlConnection(object):
         ws = ' AND '.join(ws)
         stmt = 'DELETE FROM {} WHERE {}'.format(tbl, ws)
         rc = self.executemany(stmt, paramslist=recs, commit=True, fetchall=False)
+        # pylint: disable=protected-access
         return rc._rows._cursor.rowcount
-    
+
     def _exist_in_recs(self, idx, recs, keyflds):
         rec = recs[idx]
         for i in range(idx):
