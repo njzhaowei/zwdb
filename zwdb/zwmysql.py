@@ -83,6 +83,10 @@ class ZWMysql(object):
             rtn = conn.exists(tbl, rec, keyflds)
         return rtn
 
+    def contains(self, tbl, clause=None, **params):
+        r = self.findone(tbl, clause, **params)
+        return r is not None
+
     def insert(self, tbl, recs):
         with self.get_connection() as conn:
             rtn = conn.insert(tbl, recs)
