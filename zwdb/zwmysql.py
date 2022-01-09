@@ -206,6 +206,8 @@ class ZWMysqlConnection(object):
         return results
 
     def executemany(self, stmt, paramslist=None, commit=False, fetchall=True):
+        if self._debug:
+            print('%s <= %s'%(stmt, paramslist))
         paramslist = paramslist or []
         # Execute the given query
         self._cursor = self._conn.cursor(buffered=False)
