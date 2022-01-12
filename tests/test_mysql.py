@@ -149,3 +149,7 @@ class TestMysql:
     def test_findone(self, db):
         r = db.findone('tbl', id=1)
         assert r
+    
+    def test_count(self, db):
+        r = db.count('tbl', id=1, txt='abc')
+        assert r == 1

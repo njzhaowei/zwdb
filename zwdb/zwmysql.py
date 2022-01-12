@@ -86,6 +86,11 @@ class ZWMysql(object):
     def contains(self, tbl, clause=None, **params):
         r = self.findone(tbl, clause, **params)
         return r is not None
+    
+    def count(self, tbl, **params):
+        with self.get_connection() as conn:
+            rtn = conn.count(tbl, **params)
+        return rtn
 
     def insert(self, tbl, recs):
         with self.get_connection() as conn:
@@ -242,6 +247,15 @@ class ZWMysqlConnection(object):
         stmt = 'SELECT count(*) AS count FROM {} WHERE {}'.format(tbl, ws)
         r = self.execute(stmt, commit=False, fetchall=True, **rec)
         return r[0].count != 0
+
+    def count(self, tbl, **params):
+        stmt = 'SELECT count(*) AS count FROM {}'.format(tbl)
+        ks = params.keys()
+        if params:
+            vs = ' AND '.join(['{0}=%({0})s'.format(s) if params[s] is not None else 'isnull({0})'.format(s) for s in ks])
+            stmt += ' WHERE {}'.format(vs)
+        r = self.execute(stmt, commit=False, fetchall=True, **params)
+        return r[0].count
 
     def insert(self, tbl, recs):
         if recs is None or len(recs) == 0:
