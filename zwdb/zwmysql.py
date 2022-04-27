@@ -314,7 +314,6 @@ class ZWMysqlConnection(object):
         ws = ['{0}=%({0})s'.format(k) if isinstance(k, str) else self._cond_map(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
-        stmt = 'DELETE FROM {} WHERE {}'.format(tbl, ws)
         return ws
 
     def _get_wheres(self, **params):
