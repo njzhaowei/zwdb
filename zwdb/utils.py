@@ -1,5 +1,4 @@
 from inspect import isclass
-import re
 from urllib.parse import urlparse, parse_qs
 
 def extend_attrs(settings, setting_items):

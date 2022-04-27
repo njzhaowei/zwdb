@@ -1,147 +1,146 @@
 # -*- coding: utf-8 -*-
-from _pytest.mark import param
 import pytest
-import os
-import sys
-from datetime import datetime
-
+import datetime
 from zwdb.zwmysql import ZWMysql
 
-db_url = 'mysql://tester:test@localhost/testdb'
+DB_URL = 'mysql://tester:test@localhost/testdb'
+TBLS = ['tbl', 'tbl_create']
+RECS_INIT = [
+    {'id': 1, 'txt': 'abc', 'num': 1, 'none': None, 'dt': datetime.datetime.now()},
+    {'id': 2, 'txt': 'def', 'num': 2, 'none': None, 'dt': datetime.datetime.now()-datetime.timedelta(days=1)},
+    {'id': 3, 'txt': 'ghi', 'num': 3, 'none': None, 'dt': datetime.datetime.now()-datetime.timedelta(days=2)},
+]
+RECS_INSERT = [
+    {'txt': 'aaa', 'num': 10, 'none': None},
+    {'txt': 'aaa', 'num': 11, 'none': None},
+]
+RECS_UPDATE = [
+    {'txt': 'XXX', 'num': 10, 'none': None},
+]
+RECS_UPSERT = [
+    {'txt': 'aaa', 'num': 10, 'none': None},
+    {'txt': 'ccc', 'num': 12, 'none': None},
+]
+
 @pytest.fixture(scope='module')
 def db():
-    with ZWMysql(db_url) as dbobj:
+    with ZWMysql(DB_URL) as dbobj:
+        # clean
+        with dbobj.get_connection() as conn:
+            for t in TBLS:
+                conn.execute('DROP TABLE IF EXISTS %s'%t, commit=True)
         with dbobj.get_connection() as conn:
             tbl = 'CREATE TABLE `tbl` ( \
                 `id` int(11) NOT NULL AUTO_INCREMENT, \
                 `txt` varchar(45) DEFAULT NULL, \
-                PRIMARY KEY (`id`) \
-                ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4;'
-            tbl_insert = 'CREATE TABLE `testdb`.`tbl_insert` (\
-                `id` INT NOT NULL,\
-                `txt` VARCHAR(45) NULL,\
                 `num` FLOAT NULL,\
                 `none` VARCHAR(45) NULL,\
                 `dt` DATETIME NULL,\
-                PRIMARY KEY (`id`));'
-            tbls = [tbl, tbl_insert]
-            for t in tbls:
+                PRIMARY KEY (`id`) \
+                ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4;'
+            sqls = [tbl]
+            for t in sqls:
                 conn.execute(t, commit=True)
 
-            recs_insert = [{'id':1, 'txt':'abc'}, {'id':2, 'txt':None}, {'id':3, 'txt':'xxx'}]
-            ks = recs_insert[0].keys()
+            ks = RECS_INIT[0].keys()
             fs = ','.join(ks)
             vs = ','.join(['%({})s'.format(s) for s in ks])
             stmt = 'INSERT INTO tbl ({}) VALUES({})'.format(fs, vs)
-            conn.executemany(stmt, fetchall=False, commit=True, paramslist=recs_insert)
+            conn.executemany(stmt, fetchall=False, commit=True, paramslist=RECS_INIT)
         yield dbobj
         # clean
         with dbobj.get_connection() as conn:
-            tbls = ['tbl', 'tbl_insert', 'tbl_create']
-            for t in tbls:
+            for t in TBLS:
                 conn.execute('DROP TABLE IF EXISTS %s'%t, commit=True)
 
-class TestMysql:
-    def test_list(self, db):
-        assert len(db.lists())>0
-    
-    def test_find(self, db):
-        rs = db.find('tbl')
-        assert rs.pending == True
-        recs = list(rs)
-        assert rs.pending == False and recs[0].txt == 'abc' and len(recs) == 3
+def test_info(db):
+    tbls = db.lists()
+    dbver = db.version
+    dbsiz = db.pool_size
+    assert len(tbls) == 1 and len(dbver.split('.')) == 3 and dbsiz == db.dbcfg['pool_size']
 
-        rs = db.find('tbl')
-        assert rs.pending == True
-        recs = rs.all()
-        assert rs.pending == False and recs[0].txt == 'abc' and len(recs) == 3
-  
-        rs = db.find('tbl')
-        assert rs.pending == True
-        recs = [r for r in rs]
-        assert rs.pending == False and recs[0].txt == 'abc' and len(recs) == 3
-        
-        rs = db.find('tbl', fetchall=True)
-        assert rs.pending == False
+def test_find(db):
+    tbl = TBLS[0]
+    rs = db.find(tbl)
+    assert rs.pending is True
+    recs = list(rs)
+    assert rs.pending is False and recs[0].txt == RECS_INIT[0]['txt'] and len(recs) == len(RECS_INIT)
 
-        rs = db.find('tbl', fetchall=True, id=1, txt='abc')
-        assert len(rs) == 1
+    recs = db.find(tbl).all()
+    assert recs[0].txt == RECS_INIT[0]['txt'] and len(recs) == len(RECS_INIT)
 
-        rs = db.find('tbl', clause={'order by':'txt desc', 'limit':1}, txt=None, fetchall=True)
-        assert len(rs) == 1 and rs[0].id == 2
+    recs = [r for r in db.find(tbl)]
+    assert recs[0].txt == RECS_INIT[0]['txt'] and len(recs) == len(RECS_INIT)
 
-    @pytest.mark.parametrize(
-        'recs', (
-            [
-                {'id':1, 'txt':'a', 'num':1.0, 'none':None, 'dt':datetime.now()},
-                {'id':2, 'txt':'b', 'num':2.0, 'none':None, 'dt':datetime.now()}
-            ],
-        )
+    rs = db.find(tbl, fetchall=True)
+    assert rs.pending is False and len(recs) == len(RECS_INIT)
+
+    rs = db.find(tbl, fetchall=True, id=1, txt='abc')
+    assert len(rs) == 1
+
+    rs = db.find(tbl, clause={'order by':'num desc', 'limit':2}, none=None, fetchall=True)
+    assert len(rs) == 2 and rs[0].id == 3
+
+def test_insert(db):
+    tbl = TBLS[0]
+    c = db.insert(tbl, RECS_INSERT)
+    assert c == len(RECS_INSERT)
+
+def test_update(db):
+    tbl = TBLS[0]
+    c = db.update(tbl, RECS_UPDATE, keyflds=['num', {'none': None}])
+    r = db.findone(tbl, txt='XXX')
+    assert c == 1 and r is not None
+
+def test_upsert(db):
+    tbl = TBLS[0]
+    insert_count, update_count = db.upsert(tbl, RECS_UPSERT, keyflds=['num', {'none': None}])
+    total_count = db.count(tbl, none=None)
+    r = db.findone(tbl, txt='XXX')
+    assert insert_count == 1 and update_count == 1 and total_count == 6 and r is None
+
+def test_delete(db):
+    tbl = TBLS[0]
+    a = db.delete(tbl, recs=None, keyflds=None)
+    b = db.delete(tbl, recs=[], keyflds=[])
+    c = db.delete(tbl, recs=None, keyflds=[])
+    d = db.delete(tbl, recs=[], keyflds=None)
+    r1 = db.delete(tbl, num=12)
+    r2 = db.delete(tbl, recs=RECS_INSERT, keyflds=['txt', 'num'])
+    assert all(o == 0 for o in [a, b, c, d]) and r1 == 1 and r2 == 2 and db.count(tbl) == len(RECS_INIT)
+
+def test_exists(db):
+    tbl = TBLS[0]
+    a = db.exists(tbl, rec=None, keyflds=None)
+    b = db.exists(tbl, rec=[], keyflds=[])
+    c = db.exists(tbl, rec=None, keyflds=[])
+    d = db.exists(tbl, rec=[], keyflds=None)
+    r1 = db.exists(tbl, num=1)
+    r2 = db.exists(tbl, rec=RECS_INIT[0], keyflds=['txt', 'num'])
+    assert all(o is False for o in [a, b, c, d]) and r1 is True and r2 is True
+
+@pytest.mark.parametrize(
+    'stmt, params', (
+        ('select * from '+TBLS[0]+' where txt=%(txt)s', {'txt': 'abc'}),
     )
-    def test_insert(self, db, recs):
-        c = db.insert('tbl_insert', recs)
-        assert c == len(recs)
+)
+def test_select(db, stmt, params):
+    r = db.select(stmt, **params)
+    assert r and len(r) == 1
 
-    @pytest.mark.parametrize(
-        'recs, keyflds', (
-            ([{'id':1, 'txt':'aa'},{'id':2, 'txt':'bb'}],['id']),
-        )
-    )
-    def test_update(self, db, recs, keyflds):
-        tbl = 'tbl_insert'
-        c = db.update(tbl, recs, keyflds=keyflds)
-        for rec in recs:
-            r = db.find(tbl, id=rec['id'], fetchall=True)
-            assert r[0].txt == rec['txt']
-        assert c == len(recs)
+def test_execscript(db):
+    db.exec_script('data/tbl_create.sql')
+    with db.get_connection() as conn:
+        rs = conn.execute("show tables like 'tbl_create';", fetchall=True)
+    assert len(rs) == 1
 
-    @pytest.mark.parametrize(
-        'recs, keyflds', (
-            ([{'id':1, 'txt':'a'},{'id':3, 'txt':'c', 'num':3.0, 'dt':datetime.now()}, {'id':3, 'txt':'haha'}],['id']),
-        )
-    )
-    def test_upsert(self, db, recs, keyflds):
-        tbl = 'tbl_insert'
-        c = db.upsert(tbl, recs, keyflds=keyflds)
-        total_recs = db.find(tbl, fetchall=True)
-        for i,rec in enumerate(recs):
-            r = db.find(tbl, id=rec['id'], fetchall=True)
-            if i == 1:
-                assert r[0].txt == 'haha'
-            else:
-                assert r[0].txt == rec['txt']
-        assert c[0]+c[1] == len(recs) and 3 == len(total_recs)
-
-    @pytest.mark.parametrize(
-        'recs, keyflds', (
-            ([{'id':1},{'id':3}], ['id']),
-        )
-    )
-    def test_delete(self, db, recs, keyflds):
-        tbl = 'tbl_insert'
-        c = db.delete(tbl, recs, keyflds=keyflds)
-        total_recs = db.find(tbl, fetchall=True)
-        assert c == 2 and 1 == len(total_recs)
-
-    @pytest.mark.parametrize(
-        'stmt, params', (
-            ('select * from tbl where txt=%(txt)s', {'txt': 'abc'}),
-        )
-    )
-    def test_select(self, db, stmt, params):
-        r = db.select(stmt, **params)
-        assert r and len(r) == 1
-    
-    def test_exec_script(self, db):
-        r = db.exec_script('data/tbl_create.sql')
-        with db.get_connection() as conn:
-            rs = conn.execute("show tables like 'tbl_create';", fetchall=True)
-        assert len(rs) == 1
-    
-    def test_empty_exist(self, db):
-        try:
-            with ZWMysql(db_url) as o:
-                pass
-        except AttributeError:
-            assert False
-        assert True
+def test_transaction(db):
+    tbl = TBLS[0]
+    with db.transaction() as conn:
+        conn.insert(tbl, RECS_INSERT[:1])
+        conn.insert(tbl, RECS_INSERT[1:])
+        with ZWMysql(DB_URL) as o:
+            c = o.count(tbl)
+            assert c == 3
+    c = db.count(tbl)
+    assert c == len(RECS_INIT)+len(RECS_INSERT)
