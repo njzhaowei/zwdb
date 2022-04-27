@@ -32,8 +32,8 @@ class ZWMysql(object):
             'use_pure'  : False,
             'pool_size' : 5
         }
-        for p in cfg:
-            self.dbcfg[p] = self.dbcfg.get(p, cfg[p])
+        for k,v in cfg.items():
+            self.dbcfg[k] = self.dbcfg.get(k, v)
         self._debug = False
         self._pool = None
 
@@ -48,6 +48,7 @@ class ZWMysql(object):
 
     def close(self):
         if self._pool:
+            # pylint: disable=protected-access
             self._pool._remove_connections()
 
     def lists(self):
@@ -106,17 +107,19 @@ class ZWMysql(object):
 
     def exec_script(self, fp):
         with self.get_connection() as conn:
+            # pylint: disable=protected-access
             cursor = conn._conn.cursor()
             statement = ''
-            for line in open(fp):
-                if line.strip().startswith('--'):  # ignore sql comment lines
-                    continue
-                if not line.strip().endswith(';'):  # keep appending lines that don't end in ';'
-                    statement = statement + line
-                else:  # when you get a line ending in ';' then exec statement and reset for next statement
-                    statement = statement + line
-                    cursor.execute(statement)
-                    statement = ''
+            with open(fp, encoding='utf-8') as fs:
+                for line in fs:
+                    if line.strip().startswith('--'):  # ignore sql comment lines
+                        continue
+                    if not line.strip().endswith(';'):  # keep appending lines that don't end in ';'
+                        statement = statement + line
+                    else:  # when you get a line ending in ';' then exec statement and reset for next statement
+                        statement = statement + line
+                        cursor.execute(statement)
+                        statement = ''
         return True
 
     @contextmanager
@@ -200,6 +203,8 @@ class ZWMysqlConnection(object):
         return results
 
     def executemany(self, stmt, paramslist=None, commit=False, fetchall=True):
+        if self._debug:
+            print('%s <= %s'%(stmt, paramslist))
         paramslist = paramslist or []
         # Execute the given query
         self._cursor = self._conn.cursor(buffered=False)
@@ -309,6 +314,7 @@ class ZWMysqlConnection(object):
         ws = ['{0}=%({0})s'.format(k) if isinstance(k, str) else self._cond_map(k) for k in keyflds]
         ws.append('1=1')
         ws = ' AND '.join(ws)
+        stmt = 'DELETE FROM {} WHERE {}'.format(tbl, ws)
         return ws
 
     def _get_wheres(self, **params):
