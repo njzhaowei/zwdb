@@ -30,22 +30,22 @@ def db():
             for t in TBLS:
                 conn.execute('DROP TABLE IF EXISTS %s'%t, commit=True)
         with dbobj.get_connection() as conn:
-            tbl = 'CREATE TABLE `tbl` ( \
+            sql = 'CREATE TABLE `%s` ( \
                 `id` int(11) NOT NULL AUTO_INCREMENT, \
                 `txt` varchar(45) DEFAULT NULL, \
                 `num` FLOAT NULL,\
                 `none` VARCHAR(45) NULL,\
                 `dt` DATETIME NULL,\
                 PRIMARY KEY (`id`) \
-                ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4;'
-            sqls = [tbl]
+                ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4;' % TBLS[0]
+            sqls = [sql]
             for t in sqls:
                 conn.execute(t, commit=True)
 
             ks = RECS_INIT[0].keys()
             fs = ','.join(ks)
             vs = ','.join(['%({})s'.format(s) for s in ks])
-            stmt = 'INSERT INTO tbl ({}) VALUES({})'.format(fs, vs)
+            stmt = 'INSERT INTO {} ({}) VALUES({})'.format(TBLS[0], fs, vs)
             conn.executemany(stmt, fetchall=False, commit=True, paramslist=RECS_INIT)
         yield dbobj
         # clean
@@ -141,6 +141,6 @@ def test_transaction(db):
         conn.insert(tbl, RECS_INSERT[1:])
         with ZWMysql(DB_URL) as o:
             c = o.count(tbl)
-            assert c == 3
+            assert c == len(RECS_INIT)
     c = db.count(tbl)
     assert c == len(RECS_INIT)+len(RECS_INSERT)
