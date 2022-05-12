@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=redefined-outer-name
+
 import pytest
 import datetime
 from zwdb.zwmysql import ZWMysql

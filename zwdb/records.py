@@ -148,7 +148,7 @@ class DocumentCollection(object):
         been fetched yet, consume the iterator and cache the results."""
 
         # By calling list it calls the __iter__ method
-        docs = list(self)        
+        docs = list(self)
         return docs
 
     def __iter__(self):
@@ -204,5 +204,5 @@ class DocumentCollection(object):
         return '<DocumentCollection size={} pending={}>'.format(len(self), self.pending)
 
 class ZwdbError(Exception):
-    def __init__(self, arg):
-        self.args = arg
+    def __init__(self, reason):
+        self.reason = reason
