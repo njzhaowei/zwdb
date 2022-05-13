@@ -1,13 +1,15 @@
+# pylint: disable=arguments-differ
 import time
 import pymongo
 from pymongo import UpdateOne, DeleteOne
 from pymongo.errors import ConnectionFailure
 from bson.objectid import ObjectId
 
+from .zwdbase import ZWDbase
 from . import utils
 from .records import DocumentCollection, ZwdbError
 
-class ZWMongo(object):
+class ZWMongo(ZWDbase):
     """Class defining a Mongo driver"""
     def __init__(self, db_url, **kwargs):
         # http://dochub.mongodb.org/core/connections
@@ -22,12 +24,11 @@ class ZWMongo(object):
         self.dburl = db_url
         self.dbname = o['db']
         self.dbcfg.update(kwargs)
-        cfg = {
+        cfgdef = {
             'maxPoolSize' : 500
         }
-        for p in cfg:
-            self.dbcfg[p] = self.dbcfg.get(p, cfg[p])
-
+        for k, v in cfgdef.items():
+            self.dbcfg[k] = self.dbcfg.get(k, v)
         self.client = None
         client = pymongo.MongoClient(**self.dbcfg)
         try:
@@ -46,7 +47,7 @@ class ZWMongo(object):
         return pymongo.version
 
     @property
-    def server_info(self):
+    def info(self):
         return self.client.server_info()
 
     def get_connection(self):

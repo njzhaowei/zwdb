@@ -40,8 +40,8 @@ def test_info(db):
     colls = db.lists()
     dbver = db.version
     dbsiz = db.pool_size
-    dbinf = db.server_info
-    assert len(colls) == 1 and len(dbver.split('.')) == 3 and dbsiz == db.dbcfg['maxPoolSize']
+    dbinf = db.info
+    assert len(colls) == 1 and len(dbver.split('.')) == 3 and dbsiz == db.dbcfg['maxPoolSize'] and dbinf
 
 def test_find(db):
     coll = COLLS[0]

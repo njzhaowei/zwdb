@@ -2,13 +2,9 @@
 # pylint: disable=redefined-outer-name
 
 import pytest
-import os
-import sys
-import time
 import datetime
 
 from zwdb.zwelastic import ZWElastic
-from zwdb.zwmongo import ZWMongo
 
 DB_URL = 'es://elastic:111111@yew.com:9200/'
 INDEX_NM = 'test-idxa'
@@ -87,7 +83,7 @@ INDICES = {
 }
 
 RECS_INIT = [
-    {'id': 1, 'title': '测试照地球南博万。。。', 'num': 1, 'none': None, 'receive_time': datetime.datetime.now()},
+    {'id': 1, 'title': '测试照地球南博万。。。', 'tags':['南京', '北京', '上海', '深圳'], 'num': 1, 'none': None, 'receive_time': datetime.datetime.now()},
 ]
 
 @pytest.fixture(scope='module')
@@ -96,8 +92,7 @@ def db():
         for k, v in INDICES.items():
             mydb.delete(index=k)
             mydb.create_index(k, v['settings'], v['mappings'])
-        mydb.insert(INDEX_NM, RECS_INIT)
-        time.sleep( int(''.join(filter(str.isdigit, INDICES[INDEX_NM]['settings']['refresh_interval']))) )
+        mydb.insert(INDEX_NM, RECS_INIT, refresh=True)
         yield mydb
         for k, v in INDICES.items():
             mydb.delete(index=k)
@@ -124,30 +119,102 @@ def test_exists(db):
 def test_findone(db):
     ri = db.findone(INDEX_NM)
     rd = db.findone(INDEX_NM, docid=1)
-    assert ri and rd
+    assert ri['settings'] and rd['id'] == 1
     ri = db.findone('NOT_EXIST_INDEX')
     rd = db.findone(INDEX_NM, docid=2)
     assert (not ri) and (not rd)
 
 def test_insert(db):
-    r = db.insert(INDEX_NM, {'id': 2, 'title': '测试照地球南博万。。。', 'num': 1, 'none': None, 'receive_time': datetime.datetime.now()-datetime.timedelta(days=1)})
+    r = db.insert(INDEX_NM, {'id': 2, 'title': '测试照地球南博万。。。', 'tags':['南京', '北京'], 'num': 1, 'none': None, 'receive_time': datetime.datetime.now()-datetime.timedelta(days=1)})
     assert r
     r = db.insert(INDEX_NM, {'id': 2})
     assert not r
 
-# def test_sync(db):
-#     mongourl = 'mongo://tester:test@localhost/gnews'
-#     with ZWMongo(mongourl, maxPoolSize=50) as mongo:
-#         srcs = mongo.find('sources')
-#         srcs = {o['id']:o['name'] for o in srcs}
-#         recs = mongo.find('articles')
-#         for rec in recs:
-#             body = {
-#                 'title': rec['title'],
-#                 'article_text': rec['article_text'],
-#                 'source_mark': rec['source_mark'],
-#                 'source_name': srcs[rec['source_mark']],
-#                 'keywords': rec['meta_keywords'],
-#                 'receive_time': rec['receive_time']
-#             }
-#             db.create(index='article', docid=rec['uid'], body=body)
+def test_update(db):
+    title = '测试照地球南博万。。刘德华'
+    r = db.update(INDEX_NM, docs={'id': 2, 'title': title}, refresh=True)
+    o = db.findone(INDEX_NM, docid=2)
+    assert r and o['title'] == title
+    r = db.update(INDEX_NM, docs={'id': 999, 'title': title})
+    assert not r
+
+    script = {
+        'source': 'ctx._source.num += params.num',
+        'lang': 'painless',
+        'params' : {
+            'num' : 2
+        }
+    }
+    r = db.update(INDEX_NM, docids=2, script=script, refresh=True)
+    o = db.findone(INDEX_NM, docid=2)
+    assert r and o['num'] == 1+2
+
+def test_upsert(db):
+    title = '测试照地球南博万。。刘德华。。林志玲'
+    r = db.upsert(INDEX_NM, docs={'id': 2, 'title': title}, refresh=True)
+    o = db.findone(INDEX_NM, docid=2)
+    assert r and o['title'] == title
+    r = db.upsert(INDEX_NM, docs={'id': 3, 'title': title, 'tags':['南京'], 'num': 1}, refresh=True)
+    o = db.findone(INDEX_NM, docid=3)
+    assert r and o['title'] == title
+
+def test_find(db):
+    # 分页
+    r = db.find(INDEX_NM, query={
+        'match': {
+            'num': 1
+        }
+    }, sort=[{
+        'receive_time': {
+            'order': 'desc'
+        },
+        'id': {
+            'order': 'desc'
+        },
+        '_score': {
+            'order': 'desc'
+        }
+    }], from_=0, size=1)
+    rec = r['docs'][0]
+    assert len(r['docs']) == 1 and rec['id'] == 1
+
+    r = db.find(INDEX_NM, query={
+        'match': {
+            'num': 1
+        }
+    }, sort=[{
+        'receive_time': {
+            'order': 'desc'
+        },
+        'id': {
+            'order': 'desc'
+        },
+        '_score': {
+            'order': 'desc'
+        }
+    }], from_=0, size=1, search_after=r['last'])
+    rec = r['docs'][0]
+    assert len(r['docs']) == 1 and rec['id'] == 3
+
+    # 分词
+    r = db.find(INDEX_NM, query={
+        'match': {
+            'title': '照地球'
+        }
+    })
+    assert r['total'] == 0
+
+    r = db.find(INDEX_NM, query={
+        'match': {
+            'title': '照地球南博万'
+        }
+    })
+    assert r['total'] == 3
+
+    # 拼音
+    r = db.find(INDEX_NM, query={
+        'match': {
+            'tags.pinyin': 'shanghai'
+        }
+    })
+    assert r['total'] == 1

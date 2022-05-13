@@ -10,6 +10,22 @@ class ZWDbase(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def insert(self):
+        pass
+
+    @abc.abstractmethod
+    def update(self):
+        pass
+
+    @abc.abstractmethod
+    def upsert(self):
+        pass
+
+    @abc.abstractmethod
+    def delete(self):
+        pass
+
+    @abc.abstractmethod
     def find(self):
         pass
 
@@ -20,7 +36,7 @@ class ZWDbase(abc.ABC):
     @abc.abstractmethod
     def exists(self):
         pass
-    
+
     @abc.abstractmethod
     def count(self):
         pass
