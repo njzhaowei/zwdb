@@ -64,8 +64,10 @@ class ZWMysql(object):
             conn.close()
         return recs
 
-    def findone(self, tbl, **params):
-        recs = self.find(tbl, {'limit': 1}, True, **params)
+    def findone(self, tbl, clause=None, **params):
+        clause = clause or {}
+        clause['limit'] = 1
+        recs = self.find(tbl, clause=clause, fetchall=True, **params)
         return recs[0] if len(recs)>0 else None
 
     def exists(self, tbl, rec=None, keyflds=None, **params):
@@ -228,6 +230,7 @@ class ZWMysqlConnection(object):
         if clause:
             for k,v in clause.items():
                 stmt += ' {0} {1}'.format(k, v)
+        params = {k:v for k,v in params.items() if not isinstance(v, dict)}
         results = self.execute(stmt, commit=False, fetchall=fetchall, **params)
         return results
 
@@ -246,6 +249,7 @@ class ZWMysqlConnection(object):
     def count(self, tbl, **params):
         ws = self._get_wheres(**params)
         stmt = 'SELECT count(1) AS count FROM {} WHERE {}'.format(tbl, ws)
+        params = {k:v for k,v in params.items() if not isinstance(v, dict)}
         r = self.execute(stmt, commit=False, fetchall=True, **params)
         return r[0].count
 
@@ -305,9 +309,29 @@ class ZWMysqlConnection(object):
     def _cond_map(self, o):
         hm = {
             None: 'ISNULL(%s)',
+            'like': '%s LIKE %s',
+            '<>': '%s <> %s'
         }
-        k, v = list(o.items())[0]
-        s = hm[v]%k
+        fld, val = list(o.items())[0]
+        k, v = list(val.items())[0] if isinstance(val, dict) else (None, None)
+        k = k if k is None else k.lower()
+        if k is None:
+            s = hm[k] % fld
+        elif k == 'or':
+            s = ' OR '.join([f'{fld}="{t}"' if isinstance(t, str) else f'{fld}={t}' for t in v])
+        elif k == 'range':
+            vs = v[0]
+            ve = v[1]
+            vs = f'{fld}>="{vs}"' if isinstance(vs, str) else f'{fld}>={vs}'
+            ve = f'{fld}<"{ve}"' if isinstance(ve, str) else f'{fld}<{ve}'
+            s = ' AND '.join([vs, ve])
+        elif k in hm:
+            v = f'"{v}"' if isinstance(v, str) else v
+            s = hm[k] % (fld, v)
+        else:
+            s = '%s %s'%(fld, v)
+        if s:
+            s = f'({s})'
         return s
 
     def _get_keyflds(self, keyflds):
@@ -318,7 +342,7 @@ class ZWMysqlConnection(object):
 
     def _get_wheres(self, **params):
         ks = params.keys()
-        ws = ['{0}=%({0})s'.format(k) if not any([isinstance(params[k], (dict, )), params[k] is None]) else self._cond_map({k:params[k]}) for k in ks]
+        ws = ['{0}=%({0})s'.format(k) if not any([isinstance(params[k], dict), params[k] is None]) else self._cond_map({k:params[k]}) for k in ks]
         ws.append('1=1')
         ws = ' AND '.join(ws)
         return ws

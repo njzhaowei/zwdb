@@ -49,6 +49,7 @@ def db():
             vs = ','.join(['%({})s'.format(s) for s in ks])
             stmt = 'INSERT INTO {} ({}) VALUES({})'.format(TBLS[0], fs, vs)
             conn.executemany(stmt, fetchall=False, commit=True, paramslist=RECS_INIT)
+        dbobj._debug = True
         yield dbobj
         # clean
         with dbobj.get_connection() as conn:
@@ -82,6 +83,18 @@ def test_find(db):
 
     rs = db.find(tbl, clause={'order by':'num desc', 'limit':2}, none=None, fetchall=True)
     assert len(rs) == 2 and rs[0].id == 3
+
+    rs = db.find(tbl, txt={'like': r'%b%'}, fetchall=True)
+    assert len(rs) == 1 and rs[0].id == 1
+
+    rs = db.find(tbl, num={'<>': 1}, fetchall=True)
+    assert len(rs) == 2
+
+    rs = db.find(tbl, id={'or': [1, 2]}, fetchall=True)
+    assert len(rs) == 2
+
+    rs = db.find(tbl, num={'range': [2, 4]}, fetchall=True)
+    assert len(rs) == 2
 
 def test_insert(db):
     tbl = TBLS[0]
