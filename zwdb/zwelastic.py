@@ -7,7 +7,7 @@ from . import utils
 from .records import ZwdbError
 
 class ZWElastic(ZWDbase):
-    '''Class defining a Mongo driver'''
+    '''Class defining a Elastic driver'''
     def __init__(self, dburl, https=True, **kwargs):
         o = utils.db_url_parser(dburl)
         self.dbcfg = {
@@ -145,6 +145,8 @@ class ZWElastic(ZWDbase):
             'docs': [o['_source'] for o in hits['hits']],
             'last': hits['hits'][-1]['sort'] if len(hits['hits'])>0 and 'sort' in hits['hits'][-1] else None,
         }
+        if 'aggregations' in r:
+            rtn['aggs'] = r['aggregations']
         return rtn
 
     def exists(self, index, docid=None, **params):
