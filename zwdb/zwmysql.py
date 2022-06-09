@@ -29,7 +29,7 @@ class ZWMysql(object):
         self.dbcfg.update(kwargs)
         cfg = {
             'collation' : 'utf8mb4_general_ci',
-            'use_pure'  : False,
+            'use_pure'  : True,
             'pool_size' : 5
         }
         for k,v in cfg.items():

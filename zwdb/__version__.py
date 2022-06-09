@@ -1,4 +1,4 @@
-__version__ = '0.0.49'
+__version__ = '0.0.50'
 __title__ = 'zwdb'
 __description__ = 'Personal Database Wrapper.'
 __url__ = 'https://github.com/njzhaowei'
