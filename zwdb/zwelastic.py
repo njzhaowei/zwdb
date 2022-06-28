@@ -140,9 +140,13 @@ class ZWElastic(ZWDbase):
         query = query or {'match_all': {}}
         r = self.es.search(index=index, query=query, **params)
         hits = r['hits']
+        def docs(o):
+            if 'highlight' in o:
+                o['_source']['_highlight'] = o['highlight']
+            return o['_source']
         rtn = {
             'total': hits['total']['value'],
-            'docs': [o['_source'] for o in hits['hits']],
+            'docs': [docs(o) for o in hits['hits']],
             'last': hits['hits'][-1]['sort'] if len(hits['hits'])>0 and 'sort' in hits['hits'][-1] else None,
         }
         if 'aggregations' in r:

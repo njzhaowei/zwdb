@@ -218,3 +218,33 @@ def test_find(db):
         }
     })
     assert r['total'] == 1
+
+    # 高亮
+    r = db.find(INDEX_NM, query={
+        'match': {
+            'title': '照地球南博万'
+        }
+    }, highlight={
+        'fields': {
+            'title': {}
+        }
+    })
+    assert r['total'] == 3 and '_highlight' in r['docs'][0]
+
+    rs = db.find('rpt-idx', query={
+        'match_all': {}
+    }, sort=[{
+        '_score': {
+            'order': 'desc'
+        },
+        '_id': {
+            'order': 'desc'
+        },
+    }], highlight={
+        'fields': {
+            'text': {}
+        }
+    }, _source={
+        'excludes': ['text']
+    }, from_=0, size=10)
+    a = 0
