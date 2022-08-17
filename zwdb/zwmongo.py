@@ -35,8 +35,8 @@ class ZWMongo(ZWDbase):
             # The ismaster command is cheap and does not require auth.
             client.admin.command('ismaster')
             self.client = client
-        except ConnectionFailure:
-            raise ZwdbError('Server not available, {}:{}'.format(self.dbcfg['host'], self.dbcfg['port']))
+        except ConnectionFailure as e:
+            raise ZwdbError(f'Server not available, {self.dbcfg["host"]}:{self.dbcfg["port"]}') from e
 
     @property
     def pool_size(self):
