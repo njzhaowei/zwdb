@@ -7,7 +7,7 @@ class ZWSqlite(object):
     """Class defining a sqlite driver"""
     def __init__(self, db_url, **kwargs):
         # file:C://test.db or test.db
-        self.isuri = True if db_url.startswith('file:') else False
+        self.isuri = True if str(db_url).startswith('file:') else False
         self.dbcfg = {
         }
         self.dburl = db_url
